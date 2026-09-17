@@ -1,0 +1,36 @@
+{
+  "name": "x-lytics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fully local X (Twitter) analytics sidebar. No third-party servers.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode sidebar",
+    "build": "rm -rf dist && vite build --mode interceptor && vite build --mode sidebar && cp manifest.json dist/ && cp -R public/. dist/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run typecheck && npm test && npm run build && vitest run --config vitest.build.config.ts"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.2",
+    "chart.js": "4.5.1",
+    "chartjs-adapter-date-fns": "3.0.0",
+    "date-fns": "4.4.0",
+    "dexie": "4.4.6",
+    "html-to-image": "1.11.13",
+    "preact": "10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/chrome": "0.3.0",
+    "@types/node": "^22.20.3",
+    "fake-indexeddb": "6.2.5",
+    "jsdom": "27.0.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}

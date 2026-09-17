@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "x-lytics",
+  "version": "0.1.0",
+  "description": "Fully local X (Twitter) analytics sidebar. No third-party servers.",
+  "minimum_chrome_version": "111",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "128": "icons/128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*", "https://pro.x.com/*", "https://pro.twitter.com/*"],
+      "js": ["interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*", "https://pro.x.com/*", "https://pro.twitter.com/*"],
+      "js": ["sidebar.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}
