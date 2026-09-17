@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
       outDir: "dist",
       emptyOutDir: false,
       sourcemap: false,
-      minify: false,
+      minify: true,
       target: "chrome111",
       rollupOptions: {
         input: entry.input,

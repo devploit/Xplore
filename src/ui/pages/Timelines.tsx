@@ -1,3 +1,188 @@
+import { useEffect, useState } from "preact/hooks";
+import { liveQuery } from "dexie";
+import type { TimelineRow, TweetRow, UserRow } from "@/data/db";
+import { normalizeGraphql } from "@/data/normalizer";
+import { XApiError } from "@/x-api/client";
+import { bottomCursor } from "@/x-api/cursor";
+import { ops, type Page } from "@/x-api/operations";
+import { services } from "../services";
+import { toast } from "../store";
+import { TweetCard } from "../components/TweetCard";
+import { EmptyState } from "../components/EmptyState";
+
+interface Feed {
+  tweets: TweetRow[];
+  users: Map<string, UserRow>;
+  cursor?: string;
+  loading: boolean;
+}
+
+async function fetchPage(tl: TimelineRow, cursor?: string): Promise<Page> {
+  const c = services.client;
+  if (tl.type === "list" && tl.listId) return ops.listLatestTweets(c, tl.listId, cursor);
+  if (tl.type === "search" && tl.query) return ops.searchTimeline(c, tl.query, tl.product ?? "Latest", cursor);
+  if (tl.type === "user") {
+    let userId = tl.userId;
+    if (!userId && tl.screenName) {
+      const page = await ops.userByScreenName(c, tl.screenName);
+      userId = normalizeGraphql(page.body).users[0]?.id;
+      if (userId) await services.db.timelines.update(tl.id, { userId });
+    }
+    if (!userId) throw new Error("Unknown user");
+    return ops.userTweets(c, userId, cursor);
+  }
+  throw new Error("Timeline is misconfigured");
+}
+
 export function Timelines() {
-  return <div class="xl-muted text-sm">Timelines: coming next.</div>;
+  const [list, setList] = useState<TimelineRow[]>([]);
+  const [active, setActive] = useState<TimelineRow | null>(null);
+  const [feed, setFeed] = useState<Feed>({ tweets: [], users: new Map(), loading: false });
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const sub = liveQuery(() => services.db.timelines.orderBy("created_at").toArray()).subscribe({ next: setList });
+    return () => sub.unsubscribe();
+  }, []);
+
+  const load = async (tl: TimelineRow, more = false) => {
+    setFeed((f) => ({ ...(more ? f : { tweets: [], users: new Map<string, UserRow>() }), loading: true }));
+    try {
+      const page = await fetchPage(tl, more ? feed.cursor : undefined);
+      await services.ingestor.ingestBody(page.body);
+      const { tweets, users } = normalizeGraphql(page.body);
+      const next = bottomCursor(page.body);
+      setFeed((f) => {
+        const merged = new Map(f.users);
+        users.forEach((u) => merged.set(u.id, u));
+        const seen = new Set(f.tweets.map((t) => t.id));
+        const fresh = tweets.filter((t) => !seen.has(t.id)).sort((a, b) => b.created_at - a.created_at);
+        return { tweets: [...f.tweets, ...fresh], users: merged, loading: false, ...(next ? { cursor: next } : {}) };
+      });
+    } catch (err) {
+      setFeed((f) => ({ ...f, loading: false }));
+      toast(err instanceof XApiError ? `Could not load: ${err.kind}` : "Could not load timeline", "error");
+    }
+  };
+
+  const open = (tl: TimelineRow) => {
+    setActive(tl);
+    void load(tl);
+  };
+  const remove = async (tl: TimelineRow) => {
+    await services.db.timelines.delete(tl.id);
+    if (active?.id === tl.id) setActive(null);
+  };
+
+  if (active) {
+    return (
+      <section class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <button class="xl-btn" onClick={() => setActive(null)}>← Timelines</button>
+          <strong class="truncate mx-2">{active.name}</strong>
+          <button class="xl-btn" disabled={feed.loading} onClick={() => void load(active)}>Refresh</button>
+        </div>
+        {feed.tweets.map((t) => <TweetCard key={t.id} tweet={t} screenName={feed.users.get(t.user_id_str)?.screen_name ?? "i"} />)}
+        {feed.loading && <div class="xl-muted text-xs text-center">Loading…</div>}
+        {!feed.loading && feed.tweets.length === 0 && <EmptyState title="No posts" />}
+        {feed.cursor && !feed.loading && <button class="xl-btn self-center" onClick={() => void load(active, true)}>Load more</button>}
+      </section>
+    );
+  }
+
+  return (
+    <section class="flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <strong>Custom timelines</strong>
+        <button class="xl-btn active" onClick={() => setCreating(true)}>New</button>
+      </div>
+      {creating && <NewTimeline onDone={() => setCreating(false)} />}
+      {list.length === 0 && !creating && <EmptyState title="No timelines yet" hint="Build a feed from one of your X lists, a user, or a keyword search." />}
+      {list.map((tl) => (
+        <div key={tl.id} class="xl-card flex items-center justify-between gap-2">
+          <button class="text-left flex-1" onClick={() => open(tl)}>
+            <div class="font-semibold">{tl.name}</div>
+            <div class="text-xs xl-muted">{tl.type === "list" ? `List ${tl.listId}` : tl.type === "user" ? `@${tl.screenName}` : `Search: ${tl.query} (${tl.product})`}</div>
+          </button>
+          <button class="xl-btn" onClick={() => void remove(tl)} aria-label={`Delete ${tl.name}`}>🗑</button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function NewTimeline({ onDone }: { onDone: () => void }) {
+  const [type, setType] = useState<TimelineRow["type"]>("search");
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const [product, setProduct] = useState<"Top" | "Latest">("Latest");
+  const [lists, setLists] = useState<{ id: string; name: string }[] | null>(null);
+
+  const loadLists = async () => {
+    try {
+      const page = await ops.listsManagement(services.client);
+      const found: { id: string; name: string }[] = [];
+      const visit = (n: unknown): void => {
+        if (Array.isArray(n)) return n.forEach(visit);
+        if (typeof n !== "object" || n === null) return;
+        const r = n as Record<string, unknown>;
+        if (r.__typename === "TimelineTwitterList" && typeof r.list === "object" && r.list) {
+          const l = r.list as Record<string, unknown>;
+          if (typeof l.id_str === "string" && typeof l.name === "string") found.push({ id: l.id_str, name: l.name });
+        }
+        Object.values(r).forEach(visit);
+      };
+      visit(page.body);
+      setLists(found);
+    } catch {
+      toast("Could not load your lists", "error");
+      setLists([]);
+    }
+  };
+  useEffect(() => {
+    if (type === "list" && lists === null) void loadLists();
+  }, [type]);
+
+  const save = async () => {
+    const v = value.trim().replace(/^@/, "");
+    if (!v) return;
+    const row: TimelineRow = { id: crypto.randomUUID(), type, name: name.trim() || v, created_at: Date.now() };
+    if (type === "list") row.listId = v.split("/").pop() ?? v;
+    if (type === "user") row.screenName = v;
+    if (type === "search") {
+      row.query = v;
+      row.product = product;
+    }
+    await services.db.timelines.put(row);
+    onDone();
+  };
+
+  return (
+    <div class="xl-card flex flex-col gap-2">
+      <div class="flex gap-1" role="radiogroup" aria-label="Timeline type">
+        {(["search", "list", "user"] as const).map((t) => (
+          <button key={t} role="radio" aria-checked={type === t} class={`xl-btn capitalize ${type === t ? "active" : ""}`} onClick={() => setType(t)}>{t}</button>
+        ))}
+      </div>
+      <input class="xl-input" placeholder="Name (optional)" value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+      {type === "list" && lists && lists.length > 0 ? (
+        <select class="xl-input" value={value} onChange={(e) => setValue((e.target as HTMLSelectElement).value)}>
+          <option value="">Pick a list</option>
+          {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      ) : (
+        <input class="xl-input" placeholder={type === "list" ? "List id or URL" : type === "user" ? "@username" : "Search query, e.g. from:nasa -filter:replies"} value={value} onInput={(e) => setValue((e.target as HTMLInputElement).value)} />
+      )}
+      {type === "search" && (
+        <select class="xl-input" value={product} onChange={(e) => setProduct((e.target as HTMLSelectElement).value as "Top" | "Latest")}>
+          <option value="Latest">Latest</option>
+          <option value="Top">Top</option>
+        </select>
+      )}
+      <div class="flex gap-2 justify-end">
+        <button class="xl-btn" onClick={onDone}>Cancel</button>
+        <button class="xl-btn active" onClick={() => void save()}>Save</button>
+      </div>
+    </div>
+  );
 }
