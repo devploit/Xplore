@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:host {
+  all: initial;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #0f1419;
+  --xl-bg: #ffffff;
+  --xl-border: #eff3f4;
+  --xl-muted: #536471;
+  --xl-accent: #f97316;
+}
+
+:host(.dark) {
+  color: #e7e9ea;
+  --xl-bg: #000000;
+  --xl-border: #2f3336;
+  --xl-muted: #71767b;
+}
+
+:host(.dim) {
+  --xl-bg: #15202b;
+  --xl-border: #38444d;
+  --xl-muted: #8b98a5;
+}
+
+.xl-panel {
+  background: var(--xl-bg);
+  border-left: 1px solid var(--xl-border);
+}
+
+.xl-border {
+  border-color: var(--xl-border);
+}
+
+.xl-muted {
+  color: var(--xl-muted);
+}
+
+.xl-card {
+  border: 1px solid var(--xl-border);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.xl-btn {
+  border: 1px solid var(--xl-border);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  background: transparent;
+  color: inherit;
+}
+
+.xl-btn:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.xl-btn[aria-pressed="true"],
+.xl-btn.active {
+  background: var(--xl-accent);
+  border-color: var(--xl-accent);
+  color: #fff;
+}
+
+.xl-input {
+  border: 1px solid var(--xl-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+}
+
+.xl-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.xl-scroll::-webkit-scrollbar-thumb {
+  background: var(--xl-border);
+  border-radius: 8px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--xl-accent);
+  outline-offset: 2px;
+}
