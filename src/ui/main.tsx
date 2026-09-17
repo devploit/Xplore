@@ -11,6 +11,7 @@ import { ensurePageStyles } from "./page-styles";
 import { setServices } from "./services";
 import { captured, initStore, jobStatus, settings, theme } from "./store";
 import { observeTheme } from "./theme";
+import { watchXRoute } from "./xroute";
 
 const HOST_ID = "x-lytics-root";
 
@@ -46,6 +47,7 @@ async function bootstrap(): Promise<void> {
     if (settings.value.theme === "system") theme.value = t;
   });
   ensurePageStyles();
+  watchXRoute();
 
   const host = document.createElement("div");
   host.id = HOST_ID;

@@ -12,8 +12,10 @@ import { Tweets } from "./pages/Tweets";
 import { Mentions } from "./pages/Mentions";
 import { Timelines } from "./pages/Timelines";
 import { SettingsPage } from "./pages/Settings";
+import { Profile } from "./pages/Profile";
+import { profileFromPath, xPath } from "./xroute";
 
-const PAGES = { home: Home, activities: Activities, tweets: Tweets, mentions: Mentions, timelines: Timelines, settings: SettingsPage } as const;
+const PAGES = { home: Home, activities: Activities, tweets: Tweets, mentions: Mentions, timelines: Timelines, profile: Profile, settings: SettingsPage } as const;
 
 export function App({ host }: { host: HTMLElement }) {
   useEffect(() => {
@@ -46,7 +48,10 @@ export function App({ host }: { host: HTMLElement }) {
     );
   }
   const Page = PAGES[route.value];
-  const tabs = ROUTES.filter((r) => r.id !== "settings" && s.pages[r.id] !== false);
+  const onProfile = profileFromPath(xPath.value) !== undefined;
+  const tabs = ROUTES.filter((r) => r.id !== "settings" && s.pages[r.id] !== false && (r.id !== "profile" || onProfile));
+  // Leaving a profile page while the Profile tab is open falls back to Home.
+  if (route.value === "profile" && !onProfile) go("home");
   const onNavKey = (e: KeyboardEvent, idx: number) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     e.preventDefault();

@@ -2,11 +2,12 @@ import { useEffect, useState } from "preact/hooks";
 import { liveQuery } from "dexie";
 import type { TimelineRow, TweetRow, UserRow } from "@/data/db";
 import { normalizeGraphql } from "@/data/normalizer";
+import { hotPosts } from "@/analytics";
 import { XApiError } from "@/x-api/client";
 import { bottomCursor } from "@/x-api/cursor";
 import { ops, type Page } from "@/x-api/operations";
 import { services } from "../services";
-import { toast } from "../store";
+import { me, toast } from "../store";
 import { TweetCard } from "../components/TweetCard";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/icons";
@@ -41,10 +42,24 @@ export function Timelines() {
   const [active, setActive] = useState<TimelineRow | null>(null);
   const [feed, setFeed] = useState<Feed>({ tweets: [], users: new Map(), loading: false });
   const [creating, setCreating] = useState(false);
+  const [hot, setHot] = useState<{ tweet: TweetRow; velocity: number }[]>([]);
+  const [hotUsers, setHotUsers] = useState<Map<string, UserRow>>(new Map());
+  const [showHot, setShowHot] = useState(false);
 
   useEffect(() => {
     const sub = liveQuery(() => services.db.timelines.orderBy("created_at").toArray()).subscribe({ next: setList });
-    return () => sub.unsubscribe();
+    // Posts captured from your own timeline in the last day, ranked by how fast they gather engagement.
+    const hotSub = liveQuery(async () => {
+      const since = Date.now() - 24 * 3_600_000;
+      const recent = await services.db.tweets.where("created_at").above(since).toArray();
+      const ranked = hotPosts(recent, me.value?.id, Date.now(), 24 * 3_600_000, 30);
+      const users = await services.db.users.bulkGet([...new Set(ranked.map((h) => h.tweet.user_id_str))]);
+      return { ranked, users: new Map(users.filter((u): u is UserRow => !!u).map((u) => [u.id, u])) };
+    }).subscribe({ next: ({ ranked, users }) => { setHot(ranked); setHotUsers(users); } });
+    return () => {
+      sub.unsubscribe();
+      hotSub.unsubscribe();
+    };
   }, []);
 
   const load = async (tl: TimelineRow, more = false) => {
@@ -96,6 +111,19 @@ export function Timelines() {
     <section class="flex flex-col gap-3">
       <SectionTitle right={<button class="xl-btn text-[11px] py-[3px]" onClick={() => setCreating(true)}><Icon.plus size={12} /> New feed</button>}>Custom feeds</SectionTitle>
       {creating && <NewTimeline onDone={() => setCreating(false)} />}
+      <button class="xl-card xl-card-2 flex items-center justify-between gap-2 text-left w-full" onClick={() => setShowHot(!showHot)} aria-expanded={showHot}>
+        <span>
+          <span class="font-semibold inline-flex items-center gap-1"><Icon.flame size={14} /> Worth replying to</span>
+          <span class="block text-xs xl-muted">Posts from your timeline gaining engagement fastest in the last 24 h · {hot.length}</span>
+        </span>
+        <span class="xl-muted">{showHot ? "▾" : "▸"}</span>
+      </button>
+      {showHot && (hot.length === 0 ? <EmptyState title="Nothing hot yet" hint="Scroll your home timeline for a bit; posts you see are ranked here by engagement per hour." /> : hot.map((h) => (
+        <div key={h.tweet.id} class="relative">
+          <span class="absolute -top-2 left-3 z-10 xl-pill" style={{ background: "var(--xl-bg)", border: "1px solid var(--xl-border)" }} title="Engagements per hour">{Math.round(h.velocity)}/h</span>
+          <TweetCard tweet={h.tweet} screenName={hotUsers.get(h.tweet.user_id_str)?.screen_name ?? "i"} />
+        </div>
+      )))}
       {list.length === 0 && !creating && <EmptyState title="No timelines yet" hint="Build a feed from one of your X lists, a user, or a keyword search." />}
       {list.map((tl) => (
         <div key={tl.id} class="xl-card xl-card-2 flex items-center justify-between gap-2">
@@ -109,6 +137,14 @@ export function Timelines() {
     </section>
   );
 }
+
+/** Starting points that only use X search operators, so they stay local. */
+const PRESETS: { label: string; query: string; product: "Top" | "Latest" }[] = [
+  { label: "Viral today", query: "min_faves:5000 -filter:replies lang:en", product: "Top" },
+  { label: "Viral (Spanish)", query: "min_faves:2000 -filter:replies lang:es", product: "Top" },
+  { label: "Questions in my niche", query: "? min_faves:20 -filter:replies -filter:links", product: "Latest" },
+  { label: "Rising with links", query: "min_faves:200 filter:links -filter:replies", product: "Latest" },
+];
 
 function NewTimeline({ onDone }: { onDone: () => void }) {
   const [type, setType] = useState<TimelineRow["type"]>("search");
@@ -164,6 +200,13 @@ function NewTimeline({ onDone }: { onDone: () => void }) {
         ))}
       </div>
       <input class="xl-input" placeholder="Name (optional)" value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} />
+      {type === "search" && (
+        <div class="flex flex-wrap gap-1">
+          {PRESETS.map((p) => (
+            <button key={p.label} class="xl-btn text-[11px] py-[3px]" onClick={() => { setValue(p.query); if (!name) setName(p.label); setProduct(p.product); }} title={p.query}>{p.label}</button>
+          ))}
+        </div>
+      )}
       {type === "list" && lists && lists.length > 0 ? (
         <select class="xl-input" value={value} onChange={(e) => setValue((e.target as HTMLSelectElement).value)}>
           <option value="">Pick a list</option>

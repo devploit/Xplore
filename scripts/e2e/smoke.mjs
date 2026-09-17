@@ -53,7 +53,9 @@ try {
   if (process.env.XL_THEME === "light") await evalJs(`document.body.style.backgroundColor = "rgb(255, 255, 255)"`);
   await sleep(500);
   const pages = {};
-  for (const label of ["Activity", "Posts", "Mentions", "Feeds", "Settings", "Home"]) {
+  for (const label of ["Activity", "Posts", "Mentions", "Feeds", "Settings", "Profile", "Home"]) {
+    if (label === "Profile") { await evalJs(`history.pushState({}, "", "/friend"); dispatchEvent(new PopStateEvent("popstate"))`); await sleep(800); }
+    if (label === "Feeds") { await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const b = [...h.shadowRoot.querySelectorAll("nav button")].find(b => b.getAttribute("aria-label") === "Feeds"); b?.click(); })()`); await sleep(400); await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const b = [...h.shadowRoot.querySelectorAll("main button")].find(b => b.textContent.includes("Worth replying")); b?.click(); })()`); }
     await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const b = [...h.shadowRoot.querySelectorAll("nav button, header button")].find(b => (b.getAttribute("aria-label") || b.textContent).includes("${label}")); b?.click(); return !!b; })()`);
     await sleep(700);
     if (shotDir) {

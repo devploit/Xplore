@@ -31,6 +31,10 @@ export const Icon = {
   back: (p: Props) => <Svg {...p}><path d="M19 12H5" /><path d="M12 19l-7-7 7-7" /></Svg>,
   external: (p: Props) => <Svg {...p}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><path d="M15 3h6v6" /><path d="M10 14L21 3" /></Svg>,
   search: (p: Props) => <Svg {...p}><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.3-4.3" /></Svg>,
+  user: (p: Props) => <Svg {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></Svg>,
+  flame: (p: Props) => <Svg {...p}><path d="M12 22c4.4 0 7-2.8 7-6.5 0-3-1.7-5-3.5-7-.3 2-1.2 3-2.5 3.5.3-3-1-6-3.5-8C9.6 6.5 8 8 6.5 10.3 5.5 12 5 13.5 5 15.5 5 19.2 7.6 22 12 22z" /></Svg>,
+  clock: (p: Props) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>,
+  hash: (p: Props) => <Svg {...p}><path d="M4 9h16" /><path d="M4 15h16" /><path d="M10 3L8 21" /><path d="M16 3l-2 18" /></Svg>,
   logo: (p: Props) => <Svg {...p} stroke-width="2.4"><path d="M5 5l14 14" /><path d="M19 5L5 19" /></Svg>,
 };
 

@@ -7,3 +7,4 @@ export * from "./followers";
 export * from "./ranking";
 export * from "./heatmaps";
 export * from "./earnings";
+export * from "./insights";

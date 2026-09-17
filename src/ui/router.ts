@@ -1,7 +1,7 @@
 import { signal } from "@preact/signals";
 import type { IconName } from "./components/icons";
 
-export type Route = "home" | "activities" | "tweets" | "mentions" | "timelines" | "settings";
+export type Route = "home" | "activities" | "tweets" | "mentions" | "timelines" | "profile" | "settings";
 
 export const ROUTES: { id: Route; label: string; icon: IconName }[] = [
   { id: "home", label: "Home", icon: "home" },
@@ -9,6 +9,7 @@ export const ROUTES: { id: Route; label: string; icon: IconName }[] = [
   { id: "tweets", label: "Posts", icon: "list" },
   { id: "mentions", label: "Mentions", icon: "bell" },
   { id: "timelines", label: "Feeds", icon: "layers" },
+  { id: "profile", label: "Profile", icon: "user" },
   { id: "settings", label: "Settings", icon: "gear" },
 ];
 
