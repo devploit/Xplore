@@ -36,8 +36,9 @@ async function bootstrap(): Promise<void> {
       captured.value = { ...captured.value, dropped: captured.value.dropped + 1 };
       return;
     }
-    if (data.kind !== "graphql") return;
-    void ingestor.ingestMessage(data).then((r) => {
+    if (data.kind !== "graphql" && data.kind !== "rest") return;
+    const done = data.kind === "graphql" ? ingestor.ingestMessage(data) : ingestor.ingestRest(data);
+    void done.then((r) => {
       captured.value = { messages: captured.value.messages + 1, dropped: captured.value.dropped, tweets: captured.value.tweets + r.tweets };
     });
   });

@@ -16,7 +16,7 @@ const tweet = (id, userId, screenName, legacy = {}) => ({
   __typename: "Tweet", rest_id: id,
   core: { user_results: { result: { __typename: "User", rest_id: userId, core: { created_at: "Tue Mar 01 12:00:00 +0000 2016", name: `Name ${screenName}`, screen_name: screenName }, legacy: { followers_count: 1200, friends_count: 300, statuses_count: 5400 } } } },
   views: { count: "1500" },
-  legacy: { bookmark_count: 2, created_at: new Date(Date.now() - Number(id) * 86400000).toUTCString().replace(",", ""), conversation_id_str: id, entities: { hashtags: [], urls: [], user_mentions: [] }, favorite_count: 30 + Number(id), full_text: `tweet ${id} from fake X`, is_quote_status: false, lang: "en", quote_count: 1, reply_count: 4, retweet_count: 5, user_id_str: userId, id_str: id, ...legacy },
+  legacy: { favorited: Number(id) % 2 === 0, retweeted: false, bookmarked: id === "1", extended_entities: { media: [{ type: "photo", media_url_https: "https://pbs.twimg.com/media/fake.jpg", expanded_url: `https://x.com/${screenName}/status/${id}/photo/1` }] }, bookmark_count: 2, created_at: new Date(Date.now() - Number(id) * 86400000).toUTCString().replace(",", ""), conversation_id_str: id, entities: { hashtags: [], urls: [], user_mentions: [] }, favorite_count: 30 + Number(id), full_text: `tweet ${id} from fake X`, is_quote_status: false, lang: "en", quote_count: 1, reply_count: 4, retweet_count: 5, user_id_str: userId, id_str: id, ...legacy },
 });
 const item = (id, result) => ({ entryId: `tweet-${id}`, sortIndex: "1", content: { entryType: "TimelineTimelineItem", itemContent: { itemType: "TimelineTweet", tweet_results: { result } } } });
 const cursor = (v) => ({ entryId: `cursor-bottom`, content: { entryType: "TimelineTimelineCursor", value: v, cursorType: "Bottom" } });
@@ -27,6 +27,10 @@ const server = createServer({ key: readFileSync(join(certDir, "key.pem")), cert:
   const url = new URL(req.url, "https://x.com");
   requests.push({ method: req.method, path: url.pathname, csrf: req.headers["x-csrf-token"], auth: (req.headers.authorization || "").slice(0, 12) });
   if (url.pathname === "/__requests") { res.setHeader("content-type", "application/json"); return res.end(JSON.stringify(requests)); }
+  if (url.pathname === "/i/api/2/notifications/all.json") {
+    res.setHeader("content-type", "application/json");
+    return res.end(JSON.stringify({ globalObjects: { users: { "8": { id_str: "8", screen_name: "notifier", name: "Notifier", followers_count: 50, friends_count: 5, statuses_count: 9 } }, tweets: { "900": { id_str: "900", user_id_str: "8", created_at: new Date(Date.now() - 3600000).toUTCString().replace(",", ""), full_text: "@me mention via notifications", in_reply_to_user_id_str: "42", in_reply_to_status_id_str: "1", favorite_count: 12, retweet_count: 1, reply_count: 0, quote_count: 0, bookmark_count: 0, entities: {}, ext_views: { count: "420" } } } }, timeline: { instructions: [] } }));
+  }
   if (url.pathname.startsWith("/i/api/graphql/")) {
     const op = url.pathname.split("/").pop();
     const vars = JSON.parse(url.searchParams.get("variables") || "{}");
@@ -47,9 +51,11 @@ const server = createServer({ key: readFileSync(join(certDir, "key.pem")), cert:
   <script>
     // Simulates X's own client: fetch via fetch() and via XHR, both GraphQL.
     fetch("/i/api/graphql/OBSERVED_ID/UserTweets?variables=%7B%22userId%22%3A%2242%22%7D&features=%7B%22obs%22%3Atrue%7D").then(r => r.json()).then(j => { window.__xJson = j; });
+    fetch("/i/api/2/notifications/all.json?count=40");
     const x = new XMLHttpRequest(); x.open("GET", "/i/api/graphql/OBSERVED_SEARCH/SearchTimeline?variables=%7B%7D"); x.send();
   </script></body></html>`);
 });
+server.on("error", (e) => { console.error(`fake x could not listen on 8443 (${e.code}); kill the stale process first`); process.exit(2); });
 server.listen(8443, "127.0.0.1", () => console.log("fake x on 8443"));
 
 // Tiny CONNECT proxy: every HTTPS tunnel Chrome opens lands on the fake X above.
@@ -64,4 +70,5 @@ const proxy = createNet((socket) => {
   });
   socket.on("error", () => undefined);
 });
+proxy.on("error", (e) => { console.error(`proxy could not listen on 8080 (${e.code})`); process.exit(2); });
 proxy.listen(8080, "127.0.0.1", () => console.log("proxy on 8080"));

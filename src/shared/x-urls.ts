@@ -43,3 +43,13 @@ export function parseGraphqlUrl(url: string): GraphqlUrlParts | null {
   }
   return parts;
 }
+
+/** REST endpoints the sidebar parses: the notifications timelines (mentions arrive here when X does not use GraphQL for them). */
+export const REST_RE = /\/i\/api\/2\/notifications\/(all|mentions|verified)\.json(?:[?#]|$)/;
+
+export function parseRestUrl(url: string): { path: string } | null {
+  const m = REST_RE.exec(url);
+  if (!m) return null;
+  const idx = url.indexOf("/i/api/");
+  return { path: url.slice(idx).split("?")[0] ?? "" };
+}

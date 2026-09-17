@@ -64,12 +64,13 @@ try {
     }
     pages[label] = await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); return (h.shadowRoot.querySelector("main")?.textContent ?? "").replace(/\\s+/g, " ").slice(0, 260); })()`);
   }
+  const restProbe = await evalJs(`new Promise((res) => { const seen = []; const h = (e) => { if (e.data && e.data.source === "x-lytics") seen.push(e.data.kind + ":" + (e.data.op || e.data.path)); }; window.addEventListener("message", h); fetch("/i/api/2/notifications/all.json?probe=1").then(r => r.text()).then((t) => setTimeout(() => { window.removeEventListener("message", h); res({ seen, len: t.length, head: t.slice(0, 80) }); }, 800)); })`);
   const dbs = await evalJs(`indexedDB.databases().then(d => d.map(x => x.name))`);
   const db = await evalJs(`new Promise((res) => { const r = indexedDB.open("xlytics"); r.onsuccess = () => { const d = r.result; const out = {}; const names = [...d.objectStoreNames]; let n = names.length; if (n === 0) return res({ empty: true }); for (const name of names) { const rq = d.transaction(name).objectStore(name).getAll(); rq.onsuccess = () => { out[name] = rq.result; if (--n === 0) res(out); }; } }; r.onerror = () => res({ error: String(r.error) }); })`);
   
   const errors = cdp.events.filter((e) => (e.method === "Runtime.exceptionThrown") || (e.method === "Log.entryAdded" && e.params.entry.level === "error") || (e.method === "Runtime.consoleAPICalled" && e.params.type === "error")).map((e) => JSON.stringify(e.params).slice(0, 300));
   const summary = { queryIds: db.queryIds, tweets: (db.tweets||[]).map(t => ({ id: t.id, u: t.user_id_str, likes: t.favorite_count })), users: (db.users||[]).map(u => u.screen_name), snapshots: db.followerSnapshots, rateLimits: db.rateLimits, backfill: db.backfill, settings: db.settings?.length };
-  console.log(JSON.stringify({ info, pages, dbs, summary, errors: errors.slice(0, 10), errorCount: errors.length }, null, 2));
+  console.log(JSON.stringify({ info, restProbe, pages, dbs, summary, errors: errors.slice(0, 10), errorCount: errors.length }, null, 2));
 } finally {
   chrome.kill("SIGKILL");
   await sleep(300);

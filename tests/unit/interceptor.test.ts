@@ -62,3 +62,14 @@ describe("patchFetch", () => {
     expect(post).not.toHaveBeenCalled();
   });
 });
+
+describe("REST notifications", () => {
+  it("forwards notification timelines as rest messages and ignores other REST calls", () => {
+    const post = vi.fn();
+    handleResponse("https://x.com/i/api/2/notifications/all.json?count=40", 200, JSON.stringify({ globalObjects: {} }), post);
+    handleResponse("https://x.com/i/api/2/notifications/mentions.json", 200, "{}", post);
+    handleResponse("https://x.com/i/api/1.1/jot/client_event.json", 200, "{}", post);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post.mock.calls[0]?.[0]).toMatchObject({ kind: "rest", path: "/i/api/2/notifications/all.json", status: 200, body: { globalObjects: {} } });
+  });
+});

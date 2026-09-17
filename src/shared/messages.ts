@@ -22,6 +22,14 @@ export interface GraphqlMessage extends Base {
   body: unknown;
 }
 
+/** A REST (non GraphQL) response X received that the sidebar knows how to parse. Interceptor to sidebar. */
+export interface RestMessage extends Base {
+  kind: "rest";
+  path: string;
+  status: number;
+  body: unknown;
+}
+
 /** A response that could not be forwarded (too large or unparsable). Interceptor to sidebar. */
 export interface DroppedMessage extends Base {
   kind: "dropped";
@@ -35,7 +43,7 @@ export interface NavigateMessage extends Base {
   path: string;
 }
 
-export type XlMessage = GraphqlMessage | DroppedMessage | NavigateMessage;
+export type XlMessage = GraphqlMessage | RestMessage | DroppedMessage | NavigateMessage;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -59,6 +67,8 @@ export function isXlMessage(data: unknown): data is XlMessage {
         (data.fieldToggles === undefined || isBoolRecord(data.fieldToggles)) &&
         "body" in data
       );
+    case "rest":
+      return typeof data.path === "string" && typeof data.status === "number" && "body" in data;
     case "dropped":
       return typeof data.op === "string" && (data.reason === "too-large" || data.reason === "invalid-json");
     case "navigate":

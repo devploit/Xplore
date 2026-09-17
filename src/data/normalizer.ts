@@ -1,4 +1,4 @@
-import type { TweetRow, UserRow } from "./db";
+import type { MediaItem, TweetRow, UserRow } from "./db";
 
 export interface Normalized {
   tweets: TweetRow[];
@@ -95,7 +95,11 @@ export function normalizeTweet(raw: Rec, now: number): TweetRow | undefined {
   const entities = isRec(legacy.entities) ? legacy.entities : {};
   const extended = isRec(legacy.extended_entities) ? legacy.extended_entities : {};
   const mediaList = Array.isArray(extended.media) ? extended.media : Array.isArray(entities.media) ? entities.media : [];
-  const media_types = mediaList.filter(isRec).map((m) => str(m.type) ?? "unknown");
+  const mediaItems = mediaList.filter(isRec);
+  const media_types = mediaItems.map((m) => str(m.type) ?? "unknown");
+  const media: MediaItem[] = mediaItems
+    .map((m) => ({ type: str(m.type) ?? "unknown", thumb: str(m.media_url_https) ?? "", url: str(m.expanded_url) ?? str(m.url) ?? "" }))
+    .filter((m) => m.thumb.startsWith("https://pbs.twimg.com/"));
   const urls = (Array.isArray(entities.urls) ? entities.urls : []).filter(isRec).map((u) => str(u.expanded_url) ?? str(u.url) ?? "").filter(Boolean);
   const hashtags = (Array.isArray(entities.hashtags) ? entities.hashtags : []).filter(isRec).map((h) => str(h.text) ?? "").filter(Boolean);
   const user_mentions = (Array.isArray(entities.user_mentions) ? entities.user_mentions : [])
@@ -137,7 +141,37 @@ export function normalizeTweet(raw: Rec, now: number): TweetRow | undefined {
   if (rtId) row.retweeted_status_id_str = rtId;
   const lang = str(legacy.lang);
   if (lang) row.lang = lang;
+  if (media.length) row.media = media;
+  if (typeof legacy.favorited === "boolean") row.favorited = legacy.favorited;
+  if (typeof legacy.retweeted === "boolean") row.retweeted = legacy.retweeted;
+  if (typeof legacy.bookmarked === "boolean") row.bookmarked = legacy.bookmarked;
   return row;
+}
+
+/**
+ * X's older REST timelines (notifications) ship a `globalObjects` map: tweets and users keyed by id,
+ * with the legacy fields at the top level. Wrapping each one lets the GraphQL normalizer do the rest.
+ */
+export function normalizeRest(body: unknown, now: number = Date.now()): Normalized {
+  if (!isRec(body) || !isRec(body.globalObjects)) return { tweets: [], users: [] };
+  const g = body.globalObjects;
+  const users = isRec(g.users) ? Object.values(g.users).filter(isRec) : [];
+  const tweets = isRec(g.tweets) ? Object.values(g.tweets).filter(isRec) : [];
+  const userById = new Map(users.map((u) => [str(u.id_str) ?? "", u]));
+  const wrapUser = (u: Rec) => ({ __typename: "User", rest_id: u.id_str, legacy: u, is_blue_verified: u.ext_is_blue_verified ?? u.is_blue_verified });
+  const wrappedUsers = users.map(wrapUser);
+  const wrappedTweets = tweets.map((t) => {
+    const author = userById.get(str(t.user_id_str) ?? "");
+    const views = isRec(t.ext_views) ? t.ext_views : isRec(t.ext) && isRec(t.ext.views) && isRec(t.ext.views.r) && isRec(t.ext.views.r.ok) ? t.ext.views.r.ok : undefined;
+    return {
+      __typename: "Tweet",
+      rest_id: t.id_str,
+      legacy: t,
+      views: views ? { count: views.count } : undefined,
+      core: author ? { user_results: { result: wrapUser(author) } } : undefined,
+    };
+  });
+  return normalizeGraphql({ users: wrappedUsers, tweets: wrappedTweets }, now);
 }
 
 /**

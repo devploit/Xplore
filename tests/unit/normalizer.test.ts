@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeGraphql, parseXDate } from "@/data/normalizer";
+import { normalizeGraphql, normalizeRest, parseXDate } from "@/data/normalizer";
 import * as fx from "../fixtures/builders";
 
 const NOW = 1_800_000_000_000;
@@ -92,5 +92,37 @@ describe("parseXDate", () => {
     expect(parseXDate("Wed Sep 10 10:00:00 +0000 2025")).toBe(Date.UTC(2025, 8, 10, 10));
     expect(parseXDate("not a date")).toBeUndefined();
     expect(parseXDate(5)).toBeUndefined();
+  });
+});
+
+describe("media, viewer flags and REST globalObjects", () => {
+  it("stores media thumbnails from pbs.twimg.com and the viewer's like, retweet and bookmark state", () => {
+    const legacy = {
+      favorited: true,
+      retweeted: false,
+      bookmarked: true,
+      extended_entities: { media: [{ type: "photo", media_url_https: "https://pbs.twimg.com/media/abc.jpg", expanded_url: "https://x.com/me/status/1/photo/1" }, { type: "video", media_url_https: "https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/x.jpg", expanded_url: "https://x.com/me/status/1/video/1" }, { type: "photo", media_url_https: "https://evil.example/x.jpg" }] },
+    };
+    const { tweets } = normalizeGraphql(fx.userTweetsResponse([fx.itemEntry("t", fx.tweetResult("1", "42", "me", legacy))]), NOW);
+    expect(tweets[0]).toMatchObject({ favorited: true, retweeted: false, bookmarked: true, media_types: ["photo", "video", "photo"] });
+    expect(tweets[0]?.media).toEqual([
+      { type: "photo", thumb: "https://pbs.twimg.com/media/abc.jpg", url: "https://x.com/me/status/1/photo/1" },
+      { type: "video", thumb: "https://pbs.twimg.com/ext_tw_video_thumb/1/pu/img/x.jpg", url: "https://x.com/me/status/1/video/1" },
+    ]);
+  });
+
+  it("parses REST notifications globalObjects into tweets and users", () => {
+    const body = {
+      globalObjects: {
+        users: { "7": { id_str: "7", screen_name: "friend", name: "Friend", followers_count: 10, friends_count: 2, statuses_count: 3, ext_is_blue_verified: true } },
+        tweets: { "500": { id_str: "500", user_id_str: "7", created_at: "Wed Sep 10 10:00:00 +0000 2025", full_text: "@me hello", in_reply_to_user_id_str: "42", in_reply_to_status_id_str: "1", favorite_count: 3, retweet_count: 0, reply_count: 1, quote_count: 0, bookmark_count: 0, entities: {}, ext_views: { count: "88" } } },
+        notifications: { n1: { id: "n1" } },
+      },
+      timeline: { instructions: [] },
+    };
+    const { tweets, users } = normalizeRest(body, NOW);
+    expect(users[0]).toMatchObject({ id: "7", screen_name: "friend", is_blue_verified: true });
+    expect(tweets[0]).toMatchObject({ id: "500", user_id_str: "7", in_reply_to_user_id_str: "42", view_count: 88, favorite_count: 3 });
+    expect(normalizeRest({ nope: 1 }, NOW)).toEqual({ tweets: [], users: [] });
   });
 });

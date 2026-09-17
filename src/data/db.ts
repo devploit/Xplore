@@ -1,5 +1,13 @@
 import Dexie, { type EntityTable } from "dexie";
 
+export interface MediaItem {
+  type: string;
+  /** poster image for videos, the picture itself for photos (pbs.twimg.com) */
+  thumb: string;
+  /** link to the media on X */
+  url: string;
+}
+
 /** A tweet as stored locally: X's `legacy` object plus a few normalized fields. */
 export interface TweetRow {
   /** rest_id */
@@ -24,6 +32,12 @@ export interface TweetRow {
   lang?: string;
   /** media types in order: photo, video, animated_gif */
   media_types: string[];
+  /** thumbnails and links for each media item, same order as media_types */
+  media?: MediaItem[];
+  /** viewer state at capture time */
+  favorited?: boolean;
+  retweeted?: boolean;
+  bookmarked?: boolean;
   urls: string[];
   hashtags: string[];
   user_mentions: { id_str: string; screen_name: string }[];

@@ -1,7 +1,7 @@
 import type { FollowerSnapshotRow, XlyticsDb } from "./db";
-import { normalizeGraphql } from "./normalizer";
+import { normalizeGraphql, normalizeRest } from "./normalizer";
 import { QueryIdRegistry } from "./queryIds";
-import type { GraphqlMessage } from "@/shared/messages";
+import type { GraphqlMessage, RestMessage } from "@/shared/messages";
 
 export interface IngestResult {
   tweets: number;
@@ -31,9 +31,18 @@ export class Ingestor {
     return this.ingestBody(msg.body, now);
   }
 
+  /** REST notifications carry mentions in `globalObjects`. */
+  async ingestRest(msg: RestMessage, now: number = Date.now()): Promise<IngestResult> {
+    if (msg.status >= 400) return { tweets: 0, users: 0, snapshot: false };
+    return this.store(normalizeRest(msg.body, now), now);
+  }
+
   /** Same as ingestMessage for bodies fetched by the active client. */
   async ingestBody(body: unknown, now: number = Date.now()): Promise<IngestResult> {
-    const { tweets, users } = normalizeGraphql(body, now);
+    return this.store(normalizeGraphql(body, now), now);
+  }
+
+  private async store({ tweets, users }: ReturnType<typeof normalizeGraphql>, now: number): Promise<IngestResult> {
     if (tweets.length) await this.db.tweets.bulkPut(tweets);
     if (users.length) await this.db.users.bulkPut(users);
     const me = this.currentUserId();

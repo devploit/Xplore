@@ -1,9 +1,14 @@
-import { makeMessage, type DroppedMessage, type GraphqlMessage } from "@/shared/messages";
-import { parseGraphqlUrl } from "@/shared/x-urls";
+import { makeMessage, type DroppedMessage, type GraphqlMessage, type RestMessage } from "@/shared/messages";
+import { parseGraphqlUrl, parseRestUrl } from "@/shared/x-urls";
 
 export const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
-export type Post = (msg: GraphqlMessage | DroppedMessage) => void;
+export type Post = (msg: GraphqlMessage | RestMessage | DroppedMessage) => void;
+
+/** True for any X API response the sidebar wants to see. */
+export function isObserved(url: string): boolean {
+  return parseGraphqlUrl(url) !== null || parseRestUrl(url) !== null;
+}
 
 /**
  * Turns one observed X response into a message for the sidebar.
@@ -11,7 +16,17 @@ export type Post = (msg: GraphqlMessage | DroppedMessage) => void;
  */
 export function handleResponse(url: string, status: number, text: string, post: Post, requestBody?: string | null): void {
   const parts = parseGraphqlUrl(url);
-  if (!parts) return;
+  if (!parts) {
+    const rest = parseRestUrl(url);
+    if (!rest) return;
+    if (text.length > MAX_BODY_BYTES) return post(makeMessage<DroppedMessage>({ kind: "dropped", op: rest.path, reason: "too-large" }));
+    try {
+      post(makeMessage<RestMessage>({ kind: "rest", path: rest.path, status, body: JSON.parse(text) }));
+    } catch {
+      post(makeMessage<DroppedMessage>({ kind: "dropped", op: rest.path, reason: "invalid-json" }));
+    }
+    return;
+  }
   if (text.length > MAX_BODY_BYTES) {
     post(makeMessage<DroppedMessage>({ kind: "dropped", op: parts.op, reason: "too-large" }));
     return;
@@ -65,7 +80,7 @@ export function patchFetch(win: Window & typeof globalThis, post: Post): void {
     const promise = original(input, init);
     try {
       const url = requestUrl(input);
-      if (parseGraphqlUrl(url)) {
+      if (isObserved(url)) {
         const requestBody = typeof init?.body === "string" ? init.body : null;
         promise
           .then((res) => res.clone().text().then((text) => handleResponse(url, res.status, text, post, requestBody)))
@@ -95,7 +110,7 @@ export function patchXhr(win: Window & typeof globalThis, post: Post): void {
   proto.send = function patchedSend(this: XMLHttpRequest, body?: Document | XMLHttpRequestBodyInit | null): void {
     try {
       const url = urls.get(this);
-      if (url && parseGraphqlUrl(url)) {
+      if (url && isObserved(url)) {
         const requestBody = typeof body === "string" ? body : null;
         this.addEventListener("load", () => {
           try {

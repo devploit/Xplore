@@ -30,7 +30,17 @@ export function TweetCard({ tweet, screenName, showActions = true, rank }: { twe
       <div class={`leading-snug ${compactMode ? "text-[12.5px] line-clamp-3" : "text-[13px]"}`}>
         <TweetText tweet={tweet} />
       </div>
-      {!compactMode && tweet.media_types.length > 0 && <div class="text-[11px] xl-muted">{tweet.media_types.map((m) => (m === "animated_gif" ? "gif" : m)).join(" · ")}</div>}
+      {!compactMode && tweet.media && tweet.media.length > 0 && (
+        <div class={`grid gap-1 ${tweet.media.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+          {tweet.media.slice(0, 4).map((m, i) => (
+            <a key={i} href={m.url || `https://x.com${tweetUrl(handle, tweet.id)}`} target="_blank" rel="noopener noreferrer" class="relative block overflow-hidden rounded-lg" style={{ aspectRatio: tweet.media!.length === 1 ? "16 / 9" : "1 / 1", background: "var(--xl-hover)" }} title={m.type}>
+              <img src={`${m.thumb}${m.thumb.includes("?") ? "&" : "?"}name=small`} alt="" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
+              {m.type !== "photo" && <span class="absolute bottom-1 left-1 xl-pill" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>{m.type === "animated_gif" ? "GIF" : "▶ video"}</span>}
+            </a>
+          ))}
+        </div>
+      )}
+      {!compactMode && (!tweet.media || tweet.media.length === 0) && tweet.media_types.length > 0 && <div class="text-[11px] xl-muted">{tweet.media_types.map((m) => (m === "animated_gif" ? "gif" : m)).join(" · ")}</div>}
       <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs xl-muted">
         <span class="xl-metric" title="Impressions"><Icon.eye size={13} />{compact(tweet.view_count)}</span>
         <span class="xl-metric" title="Likes"><Icon.heart size={13} />{compact(tweet.favorite_count)}</span>
