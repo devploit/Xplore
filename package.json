@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm test && npm run build && vitest run --config vitest.build.config.ts",
-    "e2e": "node scripts/e2e/fake-x.mjs & sleep 1; node scripts/e2e/smoke.mjs dist 22000; kill %1"
+    "e2e": "node scripts/e2e/run.mjs dist 22000"
   },
   "dependencies": {
     "@preact/signals": "2.11.2",
