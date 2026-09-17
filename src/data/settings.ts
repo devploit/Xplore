@@ -15,6 +15,9 @@ export interface Settings {
   retentionDays: number;
   pages: Record<string, boolean>;
   posterStyle: number;
+  /** sidebar width in px */
+  width: 400 | 460 | 540;
+  compactCards: boolean;
   mentionFilters: { minLikes: number; minRetweets: number; minImpressions: number; minFollowers: number; verifiedOnly: boolean; hideReplied: boolean; sort: "latest" | "top" };
 }
 
@@ -31,6 +34,8 @@ export const DEFAULT_SETTINGS: Settings = {
   retentionDays: 90,
   pages: { home: true, activities: true, tweets: true, mentions: true, timelines: true },
   posterStyle: 0,
+  width: 460,
+  compactCards: false,
   mentionFilters: { minLikes: 0, minRetweets: 0, minImpressions: 0, minFollowers: 0, verifiedOnly: false, hideReplied: false, sort: "latest" },
 };
 

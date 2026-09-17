@@ -1,4 +1,4 @@
-import { useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { toBlob } from "html-to-image";
 import type { ComponentChildren } from "preact";
 import { me, settings, toast, updateSettings } from "../store";
@@ -34,6 +34,11 @@ const GRAIN = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/
 export function PosterModal({ title, children, onClose }: { title: string; children: ComponentChildren; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const idx = Math.min(settings.value.posterStyle, POSTER_STYLES.length - 1);
   const style = POSTER_STYLES[idx]!;
   const color = style.mode === "dark" ? "#fff" : style.mode === "light" ? "#0f1419" : "inherit";
@@ -70,10 +75,10 @@ export function PosterModal({ title, children, onClose }: { title: string; child
 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" role="dialog" aria-modal="true" aria-label={`Share ${title}`} onClick={onClose}>
-      <div class="xl-card w-[420px] max-w-[95vw] flex flex-col gap-3" style={{ background: "var(--xl-bg)" }} onClick={(e) => e.stopPropagation()}>
+      <div class="xl-card w-[420px] max-w-[95vw] flex flex-col gap-3 xl-fade" style={{ background: "var(--xl-bg)" }} onClick={(e) => e.stopPropagation()}>
         <div class="flex items-center justify-between">
           <strong>Share {title}</strong>
-          <button class="xl-btn" onClick={onClose} aria-label="Close">✕</button>
+          <button class="xl-btn icon" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div ref={ref} class="rounded-xl p-5 relative" style={{ background: style.bg, color }}>
           {style.grain && <div class="absolute inset-0 rounded-xl pointer-events-none" style={{ backgroundImage: GRAIN }} />}

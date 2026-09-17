@@ -2,8 +2,8 @@ import { useState } from "preact/hooks";
 import { bestTweets, recentTweets, splitKinds } from "@/analytics";
 import { periodData } from "../period";
 import { TweetCard } from "../components/TweetCard";
-import { PeriodSelect } from "../components/PeriodSelect";
 import { EmptyState } from "../components/EmptyState";
+import { Segmented } from "../components/Segmented";
 
 export function Home() {
   const [tab, setTab] = useState<"best" | "recent">("best");
@@ -12,13 +12,10 @@ export function Home() {
   return (
     <section class="flex flex-col gap-3">
       <div class="flex items-center justify-between gap-2">
-        <div class="flex gap-2" role="tablist">
-          <button role="tab" aria-selected={tab === "best"} class={`xl-btn ${tab === "best" ? "active" : ""}`} onClick={() => setTab("best")}>Highlights</button>
-          <button role="tab" aria-selected={tab === "recent"} class={`xl-btn ${tab === "recent" ? "active" : ""}`} onClick={() => setTab("recent")}>Recents</button>
-        </div>
-        <PeriodSelect />
+        <Segmented value={tab} onChange={setTab} label="Home view" options={[{ id: "best", label: "Highlights" }, { id: "recent", label: "Recents" }]} />
+        <span class="text-[11px] xl-muted">{list.length} posts</span>
       </div>
-      {list.length === 0 ? <EmptyState title="No posts yet" hint="Open your profile once so your posts are captured, or wait for the first sync." /> : list.map((t) => <TweetCard key={t.id} tweet={t} />)}
+      {list.length === 0 ? <EmptyState title="No posts yet" hint="Open your profile once so your posts are captured, or wait for the first sync (15 s after load)." /> : list.map((t, i) => <TweetCard key={t.id} tweet={t} rank={tab === "best" ? i + 1 : undefined} />)}
     </section>
   );
 }

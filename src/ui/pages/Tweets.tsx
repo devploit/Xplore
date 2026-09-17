@@ -4,22 +4,22 @@ import { bestTweets, isStandaloneTweet, splitKinds, worstTweets } from "@/analyt
 import { periodData } from "../period";
 import { me } from "../store";
 import { navigateX, tweetUrl } from "../navigate";
-import { compact, shortDate } from "../components/format";
-import { PeriodSelect } from "../components/PeriodSelect";
+import { compact, relative } from "../components/format";
 import { EmptyState } from "../components/EmptyState";
 import { TweetCard } from "../components/TweetCard";
+import { Icon } from "../components/icons";
+import { METRIC_COLORS } from "./Activities";
 
 type Tab = "tweets" | "replies" | "retweets" | "best" | "worst";
 type SortKey = "created_at" | "view_count" | "favorite_count" | "rt" | "reply_count" | "bookmark_count" | "media";
 
-const COLUMNS: { key: SortKey; label: string; title: string }[] = [
-  { key: "created_at", label: "Date", title: "Date" },
-  { key: "media", label: "🖼", title: "Media count" },
-  { key: "view_count", label: "👁", title: "Impressions" },
-  { key: "favorite_count", label: "♥", title: "Likes" },
-  { key: "rt", label: "↻", title: "Retweets and quotes" },
-  { key: "reply_count", label: "💬", title: "Replies" },
-  { key: "bookmark_count", label: "🔖", title: "Bookmarks" },
+const COLUMNS: { key: SortKey; title: string; icon: keyof typeof Icon; color?: string }[] = [
+  { key: "media", title: "Media", icon: "copy" },
+  { key: "view_count", title: "Impressions", icon: "eye", color: METRIC_COLORS.impressions },
+  { key: "favorite_count", title: "Likes", icon: "heart", color: METRIC_COLORS.likes },
+  { key: "rt", title: "Retweets and quotes", icon: "repeat", color: METRIC_COLORS.retweets },
+  { key: "reply_count", title: "Replies", icon: "reply", color: METRIC_COLORS.replies },
+  { key: "bookmark_count", title: "Bookmarks", icon: "bookmark", color: METRIC_COLORS.bookmarks },
 ];
 
 function sortValue(t: TweetRow, k: SortKey): number {
@@ -33,6 +33,7 @@ export function Tweets() {
   const [sort, setSort] = useState<SortKey>("created_at");
   const [desc, setDesc] = useState(true);
   const [q, setQ] = useState("");
+  const [searching, setSearching] = useState(false);
   const { tweets } = periodData.value;
 
   const rows = useMemo(() => {
@@ -64,52 +65,62 @@ export function Tweets() {
     { id: "best", label: "Best" },
     { id: "worst", label: "Worst" },
   ];
+  const totals = COLUMNS.map((c) => rows.reduce((a, t) => a + sortValue(t, c.key), 0));
 
   return (
-    <section class="flex flex-col gap-3">
-      <div class="flex items-center justify-between gap-2">
-        <div class="flex gap-1" role="tablist">
+    <section class="flex flex-col gap-2">
+      <div class="flex items-center gap-3 px-1">
+        <div class="flex gap-3" role="tablist" aria-label="Post type">
           {tabs.map((t) => (
-            <button key={t.id} role="tab" aria-selected={tab === t.id} class={`xl-btn ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>{t.label}</button>
+            <button key={t.id} role="tab" aria-selected={tab === t.id} class={`text-[11px] font-bold tracking-wider uppercase pb-1 border-b-2 ${tab === t.id ? "border-current" : "xl-muted border-transparent hover:opacity-80"}`} onClick={() => setTab(t.id)}>{t.label}</button>
           ))}
         </div>
-        <PeriodSelect />
+        <span class="ml-auto text-[11px] xl-muted">{rows.length}</span>
+        <button class="xl-btn icon" aria-pressed={searching} onClick={() => { setSearching(!searching); if (searching) setQ(""); }} title="Search" aria-label="Search posts"><Icon.search size={14} /></button>
       </div>
-      <input class="xl-input" type="search" placeholder="Search text" aria-label="Search tweets" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />
+      {searching && <input class="xl-input" type="search" autoFocus placeholder="Search text" aria-label="Search posts" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />}
       {rows.length === 0 ? (
         <EmptyState title="Nothing here" hint={tab === "worst" ? "Worst only ranks posts with at least 100 impressions." : "Try another period or tab."} />
       ) : tab === "best" || tab === "worst" ? (
-        rows.map((t) => <TweetCard key={t.id} tweet={t} />)
+        rows.map((t, i) => <TweetCard key={t.id} tweet={t} rank={i + 1} />)
       ) : (
-        <table class="w-full text-xs">
+        <table class="xl-table">
           <thead>
-            <tr class="xl-muted">
-              <th class="text-left font-normal pb-1">Text</th>
-              {COLUMNS.map((c) => (
-                <th key={c.key} class="font-normal pb-1 cursor-pointer select-none" title={c.title} aria-sort={sort === c.key ? (desc ? "descending" : "ascending") : "none"} onClick={() => clickSort(c.key)}>
-                  {c.label}{sort === c.key ? (desc ? " ↓" : " ↑") : ""}
-                </th>
-              ))}
+            <tr>
+              <th aria-sort={sort === "created_at" ? (desc ? "descending" : "ascending") : "none"} class="cursor-pointer select-none" onClick={() => clickSort("created_at")}>Time{sort === "created_at" ? (desc ? " ↓" : " ↑") : ""}</th>
+              <th>Content</th>
+              {COLUMNS.map((c) => {
+                const I = Icon[c.icon];
+                return (
+                  <th key={c.key} class="cursor-pointer select-none" title={`${c.title}${sort === c.key ? (desc ? " (descending)" : " (ascending)") : ""}`} aria-sort={sort === c.key ? (desc ? "descending" : "ascending") : "none"} onClick={() => clickSort(c.key)} style={sort === c.key && c.color ? { color: c.color } : undefined}>
+                    <I size={14} />
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
             {rows.map((t) => (
-              <tr key={t.id} class="border-t xl-border align-top">
-                <td class="py-1 pr-2 max-w-[160px]">
-                  <a href={`https://x.com${tweetUrl(handle, t.id)}`} class="hover:underline line-clamp-2" title={t.full_text} onClick={(e) => { e.preventDefault(); navigateX(tweetUrl(handle, t.id)); }}>
-                    {t.full_text.slice(0, 90)}
+              <tr key={t.id} class="border-t xl-border">
+                <td class="xl-muted">{relative(t.created_at)}</td>
+                <td class="max-w-[150px]">
+                  <a href={`https://x.com${tweetUrl(handle, t.id)}`} class="block truncate hover:underline" title={t.full_text} onClick={(e) => { e.preventDefault(); navigateX(tweetUrl(handle, t.id)); }}>
+                    {t.full_text}
                   </a>
                 </td>
-                <td class="py-1 text-center whitespace-nowrap">{shortDate(t.created_at)}</td>
-                <td class="py-1 text-center">{t.media_types.length || ""}</td>
-                <td class="py-1 text-center">{compact(t.view_count)}</td>
-                <td class="py-1 text-center">{compact(t.favorite_count)}</td>
-                <td class="py-1 text-center">{compact(t.retweet_count + t.quote_count)}</td>
-                <td class="py-1 text-center">{compact(t.reply_count)}</td>
-                <td class="py-1 text-center">{compact(t.bookmark_count)}</td>
+                {COLUMNS.map((c) => {
+                  const v = sortValue(t, c.key);
+                  return <td key={c.key} style={{ color: v > 0 && c.color ? c.color : "var(--xl-muted)" }}>{c.key === "media" ? v || "" : compact(v)}</td>;
+                })}
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr class="border-t xl-border xl-muted">
+              <td colSpan={2} class="text-left">Total</td>
+              {totals.map((v, i) => <td key={i}>{COLUMNS[i]!.key === "media" ? v : compact(v)}</td>)}
+            </tr>
+          </tfoot>
         </table>
       )}
     </section>

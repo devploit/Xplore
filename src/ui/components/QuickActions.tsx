@@ -4,6 +4,7 @@ import { ops } from "@/x-api/operations";
 import { XApiError } from "@/x-api/client";
 import { services } from "../services";
 import { toast } from "../store";
+import { Icon } from "./icons";
 
 type Action = "like" | "retweet" | "bookmark";
 
@@ -31,18 +32,23 @@ export function QuickActions({ tweet }: { tweet: TweetRow }) {
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(tweet.full_text);
-      toast("Copied");
+      toast("Text copied");
     } catch {
       toast("Clipboard unavailable", "error");
     }
   };
 
+  const btn = (action: Action, label: string, I: (typeof Icon)[keyof typeof Icon]) => (
+    <button class="xl-btn icon" aria-pressed={state[action]} disabled={busy !== null} onClick={() => run(action)} title={label} aria-label={label}>
+      <I size={13} />
+    </button>
+  );
   return (
-    <div class="flex gap-2 text-xs">
-      <button class="xl-btn" aria-pressed={state.like} disabled={busy !== null} onClick={() => run("like")} title="Like">♥</button>
-      <button class="xl-btn" aria-pressed={state.retweet} disabled={busy !== null} onClick={() => run("retweet")} title="Retweet">↻</button>
-      <button class="xl-btn" aria-pressed={state.bookmark} disabled={busy !== null} onClick={() => run("bookmark")} title="Bookmark">🔖</button>
-      <button class="xl-btn" onClick={copy} title="Copy text">⧉</button>
-    </div>
+    <span class="inline-flex gap-1">
+      {btn("like", "Like", Icon.heart)}
+      {btn("retweet", "Retweet", Icon.repeat)}
+      {btn("bookmark", "Bookmark", Icon.bookmark)}
+      <button class="xl-btn icon" onClick={copy} title="Copy text" aria-label="Copy text"><Icon.copy size={13} /></button>
+    </span>
   );
 }

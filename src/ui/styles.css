@@ -8,28 +8,46 @@
   font-size: 14px;
   line-height: 1.4;
   color: #0f1419;
+  color-scheme: light;
   --xl-bg: #ffffff;
+  --xl-bg-2: #f7f9f9;
   --xl-border: #eff3f4;
   --xl-muted: #536471;
   --xl-accent: #f97316;
+  --xl-accent-soft: rgba(249, 115, 22, 0.12);
+  --xl-on-accent: #ffffff;
+  --xl-hover: rgba(15, 20, 25, 0.06);
 }
 
 :host(.dark) {
   color: #e7e9ea;
+  color-scheme: dark;
   --xl-bg: #000000;
+  --xl-bg-2: #16181c;
   --xl-border: #2f3336;
   --xl-muted: #71767b;
+  --xl-hover: rgba(231, 233, 234, 0.08);
 }
 
+/* Dim follows X's own blue so the panel feels native next to the timeline. */
 :host(.dim) {
   --xl-bg: #15202b;
+  --xl-bg-2: #1e2732;
   --xl-border: #38444d;
   --xl-muted: #8b98a5;
+  --xl-accent: #1d9bf0;
+  --xl-accent-soft: rgba(29, 155, 240, 0.16);
+  --xl-hover: rgba(139, 152, 165, 0.12);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 .xl-panel {
   background: var(--xl-bg);
   border-left: 1px solid var(--xl-border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
 }
 
 .xl-border {
@@ -40,49 +58,260 @@
   color: var(--xl-muted);
 }
 
+.xl-accent {
+  color: var(--xl-accent);
+}
+
 .xl-card {
   border: 1px solid var(--xl-border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px;
+  background: var(--xl-bg);
+}
+
+.xl-card-2 {
+  background: var(--xl-bg-2);
 }
 
 .xl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--xl-border);
   border-radius: 9999px;
-  padding: 4px 12px;
+  padding: 5px 12px;
   font-size: 13px;
+  line-height: 1.2;
   cursor: pointer;
   background: transparent;
   color: inherit;
+  transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.xl-btn:hover {
-  background: rgba(128, 128, 128, 0.12);
+.xl-btn:hover:not(:disabled) {
+  background: var(--xl-hover);
+}
+
+.xl-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .xl-btn[aria-pressed="true"],
 .xl-btn.active {
   background: var(--xl-accent);
   border-color: var(--xl-accent);
+  color: var(--xl-on-accent);
+}
+
+.xl-btn.icon {
+  padding: 6px;
+  border-color: transparent;
+}
+
+.xl-btn.danger {
+  background: #dc2626;
+  border-color: #dc2626;
   color: #fff;
+}
+
+/* Segmented control for sub-tabs (Highlights / Recents, table tabs). */
+.xl-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 9999px;
+  background: var(--xl-bg-2);
+  border: 1px solid var(--xl-border);
+}
+
+.xl-seg button {
+  border: 0;
+  background: transparent;
+  color: var(--xl-muted);
+  border-radius: 9999px;
+  padding: 4px 11px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.xl-seg button[aria-selected="true"] {
+  background: var(--xl-bg);
+  color: inherit;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Primary navigation: icon-only, equal columns, never scrolls. Labels live in tooltips and aria. */
+.xl-nav {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+}
+
+.xl-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--xl-muted);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.xl-nav button:hover {
+  background: var(--xl-hover);
+  color: inherit;
+}
+
+.xl-nav button[aria-current="page"] {
+  color: var(--xl-accent);
+  background: var(--xl-accent-soft);
+}
+
+.xl-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  padding: 0;
+  overflow: hidden;
+  background: var(--xl-bg-2);
+  color: var(--xl-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.xl-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.xl-avatar:hover,
+.xl-avatar.active {
+  border-color: var(--xl-accent);
 }
 
 .xl-input {
   border: 1px solid var(--xl-border);
-  border-radius: 6px;
-  padding: 4px 8px;
-  background: transparent;
+  border-radius: 8px;
+  padding: 5px 9px;
+  background: var(--xl-bg);
   color: inherit;
   font-size: 13px;
 }
 
+.xl-input:hover {
+  border-color: var(--xl-muted);
+}
+
+.xl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  background: var(--xl-accent-soft);
+  color: var(--xl-accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.xl-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.xl-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--xl-border) transparent;
+}
+
 .xl-scroll::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .xl-scroll::-webkit-scrollbar-thumb {
   background: var(--xl-border);
   border-radius: 8px;
+}
+
+.xl-noscroll {
+  scrollbar-width: none;
+}
+
+.xl-noscroll::-webkit-scrollbar {
+  display: none;
+}
+
+.xl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.xl-table th {
+  position: sticky;
+  top: -12px;
+  background: var(--xl-bg);
+  z-index: 1;
+  padding: 6px 4px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--xl-muted);
+}
+
+.xl-table th[aria-sort]:not([aria-sort="none"]) {
+  color: inherit;
+}
+
+.xl-table td {
+  padding: 5px 4px;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.xl-table th:first-child,
+.xl-table td:first-child,
+.xl-table th:nth-child(2),
+.xl-table td:nth-child(2) {
+  text-align: left;
+}
+
+.xl-table tbody tr:hover {
+  background: var(--xl-hover);
+}
+
+.xl-fab {
+  position: fixed;
+  top: 88px;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid var(--xl-border);
+  border-right: 0;
+  border-radius: 9999px 0 0 9999px;
+  background: var(--xl-bg);
+  color: var(--xl-accent);
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: -4px 0 16px rgba(0, 0, 0, 0.12);
+}
+
+.xl-fab:hover {
+  background: var(--xl-accent);
+  color: var(--xl-on-accent);
 }
 
 button:focus-visible,
@@ -91,4 +320,13 @@ input:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--xl-accent);
   outline-offset: 2px;
+}
+
+@keyframes xl-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.xl-fade {
+  animation: xl-fade 160ms ease-out;
 }

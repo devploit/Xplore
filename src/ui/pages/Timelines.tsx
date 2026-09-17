@@ -9,6 +9,8 @@ import { services } from "../services";
 import { toast } from "../store";
 import { TweetCard } from "../components/TweetCard";
 import { EmptyState } from "../components/EmptyState";
+import { Icon } from "../components/icons";
+import { SectionTitle } from "../components/Section";
 
 interface Feed {
   tweets: TweetRow[];
@@ -78,12 +80,12 @@ export function Timelines() {
     return (
       <section class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
-          <button class="xl-btn" onClick={() => setActive(null)}>← Timelines</button>
+          <button class="xl-btn" onClick={() => setActive(null)}><Icon.back size={13} /> Feeds</button>
           <strong class="truncate mx-2">{active.name}</strong>
-          <button class="xl-btn" disabled={feed.loading} onClick={() => void load(active)}>Refresh</button>
+          <button class="xl-btn icon" disabled={feed.loading} onClick={() => void load(active)} title="Refresh" aria-label="Refresh"><Icon.refresh size={14} /></button>
         </div>
         {feed.tweets.map((t) => <TweetCard key={t.id} tweet={t} screenName={feed.users.get(t.user_id_str)?.screen_name ?? "i"} />)}
-        {feed.loading && <div class="xl-muted text-xs text-center">Loading…</div>}
+        {feed.loading && <div class="xl-muted text-xs text-center py-3">Loading…</div>}
         {!feed.loading && feed.tweets.length === 0 && <EmptyState title="No posts" />}
         {feed.cursor && !feed.loading && <button class="xl-btn self-center" onClick={() => void load(active, true)}>Load more</button>}
       </section>
@@ -92,19 +94,16 @@ export function Timelines() {
 
   return (
     <section class="flex flex-col gap-3">
-      <div class="flex items-center justify-between">
-        <strong>Custom timelines</strong>
-        <button class="xl-btn active" onClick={() => setCreating(true)}>New</button>
-      </div>
+      <SectionTitle right={<button class="xl-btn text-[11px] py-[3px]" onClick={() => setCreating(true)}><Icon.plus size={12} /> New feed</button>}>Custom feeds</SectionTitle>
       {creating && <NewTimeline onDone={() => setCreating(false)} />}
       {list.length === 0 && !creating && <EmptyState title="No timelines yet" hint="Build a feed from one of your X lists, a user, or a keyword search." />}
       {list.map((tl) => (
-        <div key={tl.id} class="xl-card flex items-center justify-between gap-2">
+        <div key={tl.id} class="xl-card xl-card-2 flex items-center justify-between gap-2">
           <button class="text-left flex-1" onClick={() => open(tl)}>
             <div class="font-semibold">{tl.name}</div>
             <div class="text-xs xl-muted">{tl.type === "list" ? `List ${tl.listId}` : tl.type === "user" ? `@${tl.screenName}` : `Search: ${tl.query} (${tl.product})`}</div>
           </button>
-          <button class="xl-btn" onClick={() => void remove(tl)} aria-label={`Delete ${tl.name}`}>🗑</button>
+          <button class="xl-btn icon" onClick={() => void remove(tl)} aria-label={`Delete ${tl.name}`} title="Delete"><Icon.trash size={14} /></button>
         </div>
       ))}
     </section>
@@ -158,7 +157,7 @@ function NewTimeline({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div class="xl-card flex flex-col gap-2">
+    <div class="xl-card xl-card-2 flex flex-col gap-2">
       <div class="flex gap-1" role="radiogroup" aria-label="Timeline type">
         {(["search", "list", "user"] as const).map((t) => (
           <button key={t} role="radio" aria-checked={type === t} class={`xl-btn capitalize ${type === t ? "active" : ""}`} onClick={() => setType(t)}>{t}</button>
