@@ -34,7 +34,7 @@ export function TweetCard({ tweet, screenName, showActions = true, rank }: { twe
         <div class={`grid gap-1 ${tweet.media.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
           {tweet.media.slice(0, 4).map((m, i) => (
             <a key={i} href={m.url || `https://x.com${tweetUrl(handle, tweet.id)}`} target="_blank" rel="noopener noreferrer" class="relative block overflow-hidden rounded-lg" style={{ aspectRatio: tweet.media!.length === 1 ? "16 / 9" : "1 / 1", background: "var(--xl-hover)" }} title={m.type}>
-              <img src={`${m.thumb}${m.thumb.includes("?") ? "&" : "?"}name=small`} alt="" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
+              <img src={`${m.thumb}${m.thumb.includes("?") ? "&" : "?"}name=small`} alt="" loading="lazy" referrerpolicy="no-referrer" class="w-full h-full object-cover" onError={(e) => { const a = (e.currentTarget as HTMLElement).closest("a"); if (a) a.style.display = "none"; }} />
               {m.type !== "photo" && <span class="absolute bottom-1 left-1 xl-pill" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>{m.type === "animated_gif" ? "GIF" : "▶ video"}</span>}
             </a>
           ))}
