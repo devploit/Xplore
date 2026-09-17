@@ -86,6 +86,8 @@ export interface BackfillRow {
   last_run?: number;
   pages?: number;
   oldest_created_at?: number;
+  /** set when a walk reached the natural end of the timeline; enables incremental runs */
+  completed_at?: number;
   /** lease owner tab id and expiry, so two tabs do not run the same job */
   lease_owner?: string;
   lease_until?: number;

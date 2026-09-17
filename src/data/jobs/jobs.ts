@@ -39,12 +39,18 @@ export async function runBackfill(ctx: JobContext): Promise<Record<string, Pagin
   for (const [op, fetchPage] of sources) {
     const key = `backfill:${op}`;
     const state = await ctx.db.backfill.get(key);
-    const opts = { op, maxPages: BACKFILL_MAX_PAGES, minCreatedAt, stopWhenNoNew: true, ...(state?.cursor ? { cursor: state.cursor } : {}), ...(ctx.sleep ? { sleep: ctx.sleep } : {}), now, onProgress: (pages: number, cursor: string | undefined) => markRun(ctx.db, key, { pages, cursor }) };
+    // The first full walk must go all the way back even though passive capture already stored the
+    // newest page; only once a walk has completed do we stop at the first page with nothing new.
+    const incremental = !!state?.completed_at;
+    const opts = { op, maxPages: BACKFILL_MAX_PAGES, minCreatedAt, stopWhenNoNew: incremental, ...(state?.cursor ? { cursor: state.cursor } : {}), ...(ctx.sleep ? { sleep: ctx.sleep } : {}), now, onProgress: (pages: number, cursor: string | undefined) => markRun(ctx.db, key, { pages, cursor }) };
     const result = await pageThrough(ctx.db, ctx.client, ctx.ingestor, fetchPage, opts);
     results[op] = result;
     const patch: Record<string, unknown> = { last_run: now(), last_error: result.error };
     // A finished walk resets the cursor so the next run starts from the newest tweets again.
-    if (result.stoppedBy === "noCursor" || result.stoppedBy === "tooOld" || result.stoppedBy === "noNew") patch.cursor = undefined;
+    if (result.stoppedBy === "noCursor" || result.stoppedBy === "tooOld") {
+      patch.cursor = undefined;
+      patch.completed_at = now();
+    } else if (result.stoppedBy === "noNew") patch.cursor = undefined;
     await markRun(ctx.db, key, patch);
     if (result.stoppedBy === "unauthorized") break;
   }

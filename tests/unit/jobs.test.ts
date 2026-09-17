@@ -105,6 +105,26 @@ describe("jobs", () => {
     await db.delete();
   });
 
+  it("backfill walks past already-known pages on the first run and stops at them once completed", async () => {
+    let calls = 0;
+    const { db, client, ingestor } = setup("job-backfill-first", async (url) => {
+      calls++;
+      const cursor = new URL(url).searchParams.get("variables")?.includes("C1") ? undefined : "C1";
+      return json({ data: pageOf(cursor ? ["1", "2"] : ["3"], cursor).data });
+    });
+    // Passive capture already stored the newest page.
+    await ingestor.ingestBody(pageOf(["1", "2"], "C1"), NOW);
+    const ctx = { db, client, ingestor, userId: "42", now: () => NOW, sleep: noSleep };
+    const first = await runBackfill(ctx);
+    expect(first.UserTweets).toMatchObject({ pages: 2, stoppedBy: "noCursor" });
+    expect((await db.backfill.get("backfill:UserTweets"))?.completed_at).toBe(NOW);
+    calls = 0;
+    const second = await runBackfill(ctx);
+    expect(second.UserTweets).toMatchObject({ pages: 1, stoppedBy: "noNew" });
+    expect(calls).toBe(1);
+    await db.delete();
+  });
+
   it("follower snapshot falls back to UserByScreenName when UserByRestId is unknown", async () => {
     const { db, client, ingestor } = setup("job-followers", async () => json(fx.userByScreenNameResponse("42", "me")));
     expect(await runFollowerSnapshot({ db, client, ingestor, userId: "42", screenName: "me", now: () => NOW })).toBe(true);
