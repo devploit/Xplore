@@ -35,6 +35,9 @@ export const Icon = {
   flame: (p: Props) => <Svg {...p}><path d="M12 22c4.4 0 7-2.8 7-6.5 0-3-1.7-5-3.5-7-.3 2-1.2 3-2.5 3.5.3-3-1-6-3.5-8C9.6 6.5 8 8 6.5 10.3 5.5 12 5 13.5 5 15.5 5 19.2 7.6 22 12 22z" /></Svg>,
   clock: (p: Props) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>,
   hash: (p: Props) => <Svg {...p}><path d="M4 9h16" /><path d="M4 15h16" /><path d="M10 3L8 21" /><path d="M16 3l-2 18" /></Svg>,
+  crosshair: (p: Props) => <Svg {...p}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /><path d="M12 2v4" /><path d="M12 18v4" /><path d="M2 12h4" /><path d="M18 12h4" /></Svg>,
+  check: (p: Props) => <Svg {...p} stroke-width="2.4"><path d="M20 6L9 17l-5-5" /></Svg>,
+  pencil: (p: Props) => <Svg {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></Svg>,
   logo: (p: Props) => <Svg {...p} stroke-width="2.4"><path d="M5 5l14 14" /><path d="M19 5L5 19" /></Svg>,
 };
 

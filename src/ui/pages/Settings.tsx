@@ -3,6 +3,8 @@ import type { Settings, ThemeSetting } from "@/data/settings";
 import { ROUTES } from "../router";
 import { services } from "../services";
 import { captured, jobStatus, me, rateLimits, settings, toast, updateSettings } from "../store";
+import { tweetsToCsv } from "@/data/export";
+import { currentUserId } from "@/data/identity";
 import { CardLabel, SectionTitle } from "../components/Section";
 import { Icon } from "../components/icons";
 
@@ -31,20 +33,30 @@ export function SettingsPage() {
   const [confirm, setConfirm] = useState(false);
   const set = (patch: Partial<Settings>) => void updateSettings(patch);
 
-  const exportJson = async () => {
-    const db = services.db;
-    const dump = { exported_at: new Date().toISOString(), tweets: await db.tweets.toArray(), users: await db.users.toArray(), followerSnapshots: await db.followerSnapshots.toArray(), timelines: await db.timelines.toArray(), settings: s };
-    const blob = new Blob([JSON.stringify(dump)], { type: "application/json" });
+  const download = (content: string, type: string, extension: string) => {
+    const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `x-lytics-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `xplore-export-${new Date().toISOString().slice(0, 10)}.${extension}`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  const exportJson = async () => {
+    const db = services.db;
+    const dump = { exported_at: new Date().toISOString(), tweets: await db.tweets.toArray(), users: await db.users.toArray(), followerSnapshots: await db.followerSnapshots.toArray(), tweetMetrics: await db.tweetMetrics.toArray(), timelines: await db.timelines.toArray(), settings: s };
+    download(JSON.stringify(dump), "application/json", "json");
+  };
+  /** Own posts only, one row each, for spreadsheets. */
+  const exportCsv = async () => {
+    const id = currentUserId();
+    if (!id) return toast("No X session detected", "error");
+    const own = await services.db.tweets.where("user_id_str").equals(id).toArray();
+    download(tweetsToCsv(own, me.value?.screen_name ?? "i"), "text/csv;charset=utf-8", "csv");
+  };
   const wipe = async () => {
     const db = services.db;
-    await Promise.all([db.tweets.clear(), db.users.clear(), db.followerSnapshots.clear(), db.queryIds.clear(), db.rateLimits.clear(), db.backfill.clear(), db.timelines.clear(), db.settings.clear()]);
+    await Promise.all([db.tweets.clear(), db.users.clear(), db.followerSnapshots.clear(), db.queryIds.clear(), db.rateLimits.clear(), db.backfill.clear(), db.timelines.clear(), db.settings.clear(), db.tweetMetrics.clear()]);
     setConfirm(false);
     toast("All local data deleted");
   };
@@ -102,6 +114,7 @@ export function SettingsPage() {
         <div class="text-[11px] xl-muted py-1">This session: {captured.value.messages} responses observed, {captured.value.tweets} posts stored, {captured.value.dropped} dropped.</div>
         <div class="flex gap-2 pt-2 flex-wrap">
           <button class="xl-btn" onClick={() => void exportJson()}><Icon.share size={13} /> Export JSON</button>
+          <button class="xl-btn" onClick={() => void exportCsv()} title="Your posts, one per row, for spreadsheets"><Icon.list size={13} /> Export CSV</button>
           {confirm ? (
             <>
               <button class="xl-btn danger" onClick={() => void wipe()}>Yes, delete everything</button>
@@ -141,7 +154,7 @@ export function SettingsPage() {
         })}
       </div>
 
-      <div class="text-[11px] xl-muted text-center py-2"><CardLabel>x-lytics</CardLabel>Talks only to x.com. No servers, no telemetry.</div>
+      <div class="text-[11px] xl-muted text-center py-2"><CardLabel>Xplore</CardLabel>Talks only to x.com. No servers, no telemetry.</div>
     </section>
   );
 }

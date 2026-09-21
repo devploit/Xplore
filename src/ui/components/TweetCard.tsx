@@ -1,5 +1,5 @@
 import type { TweetRow } from "@/data/db";
-import { me, settings } from "../store";
+import { me, selectedTweetId, settings } from "../store";
 import { navigateX, tweetUrl } from "../navigate";
 import { compact, percent, relative } from "./format";
 import { TweetText } from "./TweetText";
@@ -7,9 +7,11 @@ import { QuickActions } from "./QuickActions";
 import { Icon } from "./icons";
 import { tweetEngagementRate } from "@/analytics";
 
-export function TweetCard({ tweet, screenName, showActions = true, rank }: { tweet: TweetRow; screenName?: string; showActions?: boolean; rank?: number | undefined }) {
+export function TweetCard({ tweet, screenName, showActions = true, rank, openDetail }: { tweet: TweetRow; screenName?: string; showActions?: boolean; rank?: number | undefined; openDetail?: boolean }) {
   const handle = screenName ?? (tweet.user_id_str === me.value?.id ? me.value?.screen_name : undefined) ?? "i";
   const compactMode = settings.value.compactCards;
+  // Own posts open the detail overlay; other people's posts have no snapshots to show.
+  const detail = openDetail ?? tweet.user_id_str === me.value?.id;
   const open = (e: Event) => {
     e.preventDefault();
     navigateX(tweetUrl(handle, tweet.id));
@@ -25,7 +27,10 @@ export function TweetCard({ tweet, screenName, showActions = true, rank }: { twe
           <span>{relative(tweet.created_at)}</span>
           <Icon.external size={11} />
         </a>
-        {rate !== undefined && <span class="xl-pill" title="Engagement rate: engagements / impressions">{percent(rate)}</span>}
+        <span class="inline-flex items-center gap-1">
+          {rate !== undefined && <span class="xl-pill" title="Engagement rate: engagements / impressions">{percent(rate)}</span>}
+          {detail && <button class="xl-btn icon" onClick={() => (selectedTweetId.value = tweet.id)} title="Post details" aria-label="Post details"><Icon.chart size={12} /></button>}
+        </span>
       </div>
       <div class={`leading-snug ${compactMode ? "text-[12.5px] line-clamp-3" : "text-[13px]"}`}>
         <TweetText tweet={tweet} />
@@ -47,7 +52,7 @@ export function TweetCard({ tweet, screenName, showActions = true, rank }: { twe
         <span class="xl-metric" title="Retweets and quotes"><Icon.repeat size={13} />{compact(tweet.retweet_count + tweet.quote_count)}</span>
         <span class="xl-metric" title="Replies"><Icon.reply size={13} />{compact(tweet.reply_count)}</span>
         <span class="xl-metric" title="Bookmarks"><Icon.bookmark size={13} />{compact(tweet.bookmark_count)}</span>
-        {showActions && <span class="ml-auto"><QuickActions tweet={tweet} /></span>}
+        {showActions && <span class="ml-auto"><QuickActions tweet={tweet} authorHandle={handle} /></span>}
       </div>
     </article>
   );

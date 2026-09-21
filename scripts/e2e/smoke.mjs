@@ -45,7 +45,7 @@ try {
   await cdp.send("Log.enable");
   await sleep(Number(process.argv[3] || 9000));
   const evalJs = async (expr) => (await Promise.race([cdp.send("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true }), sleep(8000).then(() => ({ result: { result: { value: "TIMEOUT" } } }))])).result?.result?.value;
-  const info = await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const s = document.getElementById("x-lytics-page-css"); return { url: location.href, host: !!h, shadow: !!h?.shadowRoot, uiText: (h?.shadowRoot?.querySelector('div')?.textContent ?? '').replace(/\\s+/g,' ').slice(0, 700), classes: h?.className, pageCss: !!s, patchedFetch: window.fetch.name, router: typeof window.__xlRouter, dbs: undefined }; })()`);
+  const info = await evalJs(`(() => { const h = document.getElementById("xplore-root"); const s = document.getElementById("xplore-page-css"); return { url: location.href, host: !!h, shadow: !!h?.shadowRoot, uiText: (h?.shadowRoot?.querySelector('div')?.textContent ?? '').replace(/\\s+/g,' ').slice(0, 700), classes: h?.className, pageCss: !!s, patchedFetch: window.fetch.name, router: typeof window.__xlRouter, dbs: undefined }; })()`);
   await cdp.send("Page.enable");
   const shotDir = process.env.XL_SHOTS;
   if (shotDir) mkdirSync(shotDir, { recursive: true });
@@ -53,18 +53,18 @@ try {
   if (process.env.XL_THEME === "light") await evalJs(`document.body.style.backgroundColor = "rgb(255, 255, 255)"`);
   await sleep(500);
   const pages = {};
-  for (const label of ["Activity", "Posts", "Mentions", "Feeds", "Settings", "Profile", "Home"]) {
-    if (label === "Profile") { await evalJs(`history.pushState({}, "", "/friend"); dispatchEvent(new PopStateEvent("popstate"))`); await sleep(800); }
-    if (label === "Feeds") { await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const b = [...h.shadowRoot.querySelectorAll("nav button")].find(b => b.getAttribute("aria-label") === "Feeds"); b?.click(); })()`); await sleep(400); await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const b = [...h.shadowRoot.querySelectorAll("main button")].find(b => b.textContent.includes("Worth replying")); b?.click(); })()`); }
-    await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); const b = [...h.shadowRoot.querySelectorAll("nav button, header button")].find(b => (b.getAttribute("aria-label") || b.textContent).includes("${label}")); b?.click(); return !!b; })()`);
+  for (const label of ["Activity", "Posts", "Mentions", "Feeds", "Settings", "Sniper", "Home"]) {
+    if (label === "Sniper") { await evalJs(`history.pushState({}, "", "/friend"); dispatchEvent(new PopStateEvent("popstate"))`); await sleep(800); }
+    if (label === "Feeds") { await evalJs(`(() => { const h = document.getElementById("xplore-root"); const b = [...h.shadowRoot.querySelectorAll("nav button")].find(b => b.getAttribute("aria-label") === "Feeds"); b?.click(); })()`); await sleep(400); await evalJs(`(() => { const h = document.getElementById("xplore-root"); const b = [...h.shadowRoot.querySelectorAll("main button")].find(b => b.textContent.includes("Worth replying")); b?.click(); })()`); }
+    await evalJs(`(() => { const h = document.getElementById("xplore-root"); const b = [...h.shadowRoot.querySelectorAll("nav button, header button")].find(b => (b.getAttribute("aria-label") || b.textContent).includes("${label}")); b?.click(); return !!b; })()`);
     await sleep(700);
     if (shotDir) {
       const shot = await cdp.send("Page.captureScreenshot", { format: "png", clip: { x: 1200 - 470, y: 0, width: 470, height: 1100, scale: 1 } });
       writeFileSync(join(shotDir, `${label.toLowerCase()}.png`), Buffer.from(shot.result.data, "base64"));
     }
-    pages[label] = await evalJs(`(() => { const h = document.getElementById("x-lytics-root"); return (h.shadowRoot.querySelector("main")?.textContent ?? "").replace(/\\s+/g, " ").slice(0, 260); })()`);
+    pages[label] = await evalJs(`(() => { const h = document.getElementById("xplore-root"); return (h.shadowRoot.querySelector("main")?.textContent ?? "").replace(/\\s+/g, " ").slice(0, 260); })()`);
   }
-  const restProbe = await evalJs(`new Promise((res) => { const seen = []; const h = (e) => { if (e.data && e.data.source === "x-lytics") seen.push(e.data.kind + ":" + (e.data.op || e.data.path)); }; window.addEventListener("message", h); fetch("/i/api/2/notifications/all.json?probe=1").then(r => r.text()).then((t) => setTimeout(() => { window.removeEventListener("message", h); res({ seen, len: t.length, head: t.slice(0, 80) }); }, 800)); })`);
+  const restProbe = await evalJs(`new Promise((res) => { const seen = []; const h = (e) => { if (e.data && e.data.source === "xplore") seen.push(e.data.kind + ":" + (e.data.op || e.data.path)); }; window.addEventListener("message", h); fetch("/i/api/2/notifications/all.json?probe=1").then(r => r.text()).then((t) => setTimeout(() => { window.removeEventListener("message", h); res({ seen, len: t.length, head: t.slice(0, 80) }); }, 800)); })`);
   const dbs = await evalJs(`indexedDB.databases().then(d => d.map(x => x.name))`);
   const db = await evalJs(`new Promise((res) => { const r = indexedDB.open("xlytics"); r.onsuccess = () => { const d = r.result; const out = {}; const names = [...d.objectStoreNames]; let n = names.length; if (n === 0) return res({ empty: true }); for (const name of names) { const rq = d.transaction(name).objectStore(name).getAll(); rq.onsuccess = () => { out[name] = rq.result; if (--n === 0) res(out); }; } }; r.onerror = () => res({ error: String(r.error) }); })`);
   

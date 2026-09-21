@@ -1,8 +1,10 @@
 import { useMemo, useState } from "preact/hooks";
 import type { TweetRow } from "@/data/db";
-import { bestTweets, isStandaloneTweet, splitKinds, worstTweets } from "@/analytics";
+import { bestTweets, groupThreads, isStandaloneTweet, splitKinds, worstTweets, type Thread } from "@/analytics";
 import { periodData } from "../period";
-import { me } from "../store";
+import { me, selectedTweetId, storeReady } from "../store";
+import { SkeletonPage } from "../components/Skeleton";
+import { TweetText } from "../components/TweetText";
 import { navigateX, tweetUrl } from "../navigate";
 import { compact, relative } from "../components/format";
 import { EmptyState } from "../components/EmptyState";
@@ -10,7 +12,7 @@ import { TweetCard } from "../components/TweetCard";
 import { Icon } from "../components/icons";
 import { METRIC_COLORS } from "./Activities";
 
-type Tab = "tweets" | "replies" | "retweets" | "best" | "worst";
+type Tab = "tweets" | "replies" | "retweets" | "threads" | "best" | "worst";
 type SortKey = "created_at" | "view_count" | "favorite_count" | "rt" | "reply_count" | "bookmark_count" | "media";
 
 const COLUMNS: { key: SortKey; title: string; icon: keyof typeof Icon; color?: string }[] = [
@@ -36,10 +38,12 @@ export function Tweets() {
   const [searching, setSearching] = useState(false);
   const { tweets } = periodData.value;
 
+  const threads = useMemo(() => (tab === "threads" ? groupThreads(tweets) : []), [tweets, tab]);
   const rows = useMemo(() => {
     const split = splitKinds(tweets);
     let list: TweetRow[];
-    if (tab === "tweets") list = split.tweets.filter(isStandaloneTweet);
+    if (tab === "threads") list = [];
+    else if (tab === "tweets") list = split.tweets.filter(isStandaloneTweet);
     else if (tab === "replies") list = split.replies;
     else if (tab === "retweets") list = split.retweets;
     else if (tab === "best") list = bestTweets([...split.tweets, ...split.replies]);
@@ -62,10 +66,13 @@ export function Tweets() {
     { id: "tweets", label: "Tweets" },
     { id: "replies", label: "Replies" },
     { id: "retweets", label: "Retweets" },
+    { id: "threads", label: "Threads" },
     { id: "best", label: "Best" },
     { id: "worst", label: "Worst" },
   ];
   const totals = COLUMNS.map((c) => rows.reduce((a, t) => a + sortValue(t, c.key), 0));
+  const sortLabel = (k: SortKey | "created_at") => (sort === k ? (desc ? "descending" : "ascending") : "none");
+  if (!storeReady.value) return <SkeletonPage />;
 
   return (
     <section class="flex flex-col gap-2">
@@ -75,11 +82,13 @@ export function Tweets() {
             <button key={t.id} role="tab" aria-selected={tab === t.id} class={`text-[11px] font-bold tracking-wider uppercase pb-1 border-b-2 ${tab === t.id ? "border-current" : "xl-muted border-transparent hover:opacity-80"}`} onClick={() => setTab(t.id)}>{t.label}</button>
           ))}
         </div>
-        <span class="ml-auto text-[11px] xl-muted">{rows.length}</span>
+        <span class="ml-auto text-[11px] xl-muted">{tab === "threads" ? threads.length : rows.length}</span>
         <button class="xl-btn icon" aria-pressed={searching} onClick={() => { setSearching(!searching); if (searching) setQ(""); }} title="Search" aria-label="Search posts"><Icon.search size={14} /></button>
       </div>
       {searching && <input class="xl-input" type="search" autoFocus placeholder="Search text" aria-label="Search posts" value={q} onInput={(e) => setQ((e.target as HTMLInputElement).value)} />}
-      {rows.length === 0 ? (
+      {tab === "threads" ? (
+        threads.length === 0 ? <EmptyState title="No threads in this period" hint="A thread is a post followed by your own replies to it." /> : threads.map((th) => <ThreadCard key={th.root.id} thread={th} />)
+      ) : rows.length === 0 ? (
         <EmptyState title="Nothing here" hint={tab === "worst" ? "Worst only ranks posts with at least 100 impressions." : "Try another period or tab."} />
       ) : tab === "best" || tab === "worst" ? (
         rows.map((t, i) => <TweetCard key={t.id} tweet={t} rank={i + 1} />)
@@ -87,13 +96,15 @@ export function Tweets() {
         <table class="xl-table">
           <thead>
             <tr>
-              <th aria-sort={sort === "created_at" ? (desc ? "descending" : "ascending") : "none"} class="cursor-pointer select-none" onClick={() => clickSort("created_at")}>Time{sort === "created_at" ? (desc ? " ↓" : " ↑") : ""}</th>
-              <th>Content</th>
+              <th scope="col" aria-sort={sortLabel("created_at")}>
+                <button class="xl-th" onClick={() => clickSort("created_at")} aria-label={`Sort by time, ${sortLabel("created_at")}`}>Time{sort === "created_at" ? (desc ? " ↓" : " ↑") : ""}</button>
+              </th>
+              <th scope="col">Content</th>
               {COLUMNS.map((c) => {
                 const I = Icon[c.icon];
                 return (
-                  <th key={c.key} class="cursor-pointer select-none" title={`${c.title}${sort === c.key ? (desc ? " (descending)" : " (ascending)") : ""}`} aria-sort={sort === c.key ? (desc ? "descending" : "ascending") : "none"} onClick={() => clickSort(c.key)} style={sort === c.key && c.color ? { color: c.color } : undefined}>
-                    <I size={14} />
+                  <th key={c.key} scope="col" aria-sort={sortLabel(c.key)} style={sort === c.key && c.color ? { color: c.color } : undefined}>
+                    <button class="xl-th" title={c.title} aria-label={`Sort by ${c.title.toLowerCase()}, ${sortLabel(c.key)}`} onClick={() => clickSort(c.key)}><I size={14} /></button>
                   </th>
                 );
               })}
@@ -124,5 +135,23 @@ export function Tweets() {
         </table>
       )}
     </section>
+  );
+}
+
+/** One of the user's threads: root text plus the sum of its parts. */
+function ThreadCard({ thread }: { thread: Thread }) {
+  return (
+    <article class="xl-card flex flex-col gap-2" data-tweet-id={thread.root.id}>
+      <div class="flex items-center justify-between text-xs xl-muted gap-2">
+        <span class="inline-flex items-center gap-1"><span class="xl-pill">{thread.parts.length} parts</span><span>{relative(thread.root.created_at)}</span></span>
+        <button class="xl-btn icon" onClick={() => (selectedTweetId.value = thread.root.id)} title="Open the first post" aria-label="Open the first post"><Icon.chart size={12} /></button>
+      </div>
+      <div class="text-[13px] leading-snug line-clamp-3"><TweetText tweet={thread.root} /></div>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs xl-muted">
+        <span class="xl-metric" title="Impressions of all parts"><Icon.eye size={13} />{compact(thread.impressions)}</span>
+        <span class="xl-metric" title="Likes, retweets, quotes, replies and bookmarks of all parts"><Icon.heart size={13} />{compact(thread.engagements)}</span>
+        <span class="xl-metric" title="Impressions of the first post"><Icon.list size={13} />{compact(thread.root.view_count)} first</span>
+      </div>
+    </article>
   );
 }

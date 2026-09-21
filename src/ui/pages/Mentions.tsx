@@ -52,6 +52,7 @@ export function Mentions() {
   };
   useEffect(() => {
     void refresh(false);
+    void updateSettings({ mentionsSeenAt: Date.now() });
   }, []);
 
   const filtered = items

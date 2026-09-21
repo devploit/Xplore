@@ -2,12 +2,12 @@ import { useEffect, useState } from "preact/hooks";
 import { liveQuery } from "dexie";
 import type { TimelineRow, TweetRow, UserRow } from "@/data/db";
 import { normalizeGraphql } from "@/data/normalizer";
-import { hotPosts } from "@/analytics";
+import { repliesToday, replyRadar, type RadarPost } from "@/analytics";
 import { XApiError } from "@/x-api/client";
 import { bottomCursor } from "@/x-api/cursor";
 import { ops, type Page } from "@/x-api/operations";
 import { services } from "../services";
-import { me, toast } from "../store";
+import { me, ownTweets, settings, toast, updateSettings } from "../store";
 import { TweetCard } from "../components/TweetCard";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/icons";
@@ -42,25 +42,33 @@ export function Timelines() {
   const [active, setActive] = useState<TimelineRow | null>(null);
   const [feed, setFeed] = useState<Feed>({ tweets: [], users: new Map(), loading: false });
   const [creating, setCreating] = useState(false);
-  const [hot, setHot] = useState<{ tweet: TweetRow; velocity: number }[]>([]);
+  const [hot, setHot] = useState<RadarPost[]>([]);
   const [hotUsers, setHotUsers] = useState<Map<string, UserRow>>(new Map());
   const [showHot, setShowHot] = useState(false);
+  const radar = settings.value.radar;
+  const myFollowers = me.value?.followers_count;
 
   useEffect(() => {
     const sub = liveQuery(() => services.db.timelines.orderBy("created_at").toArray()).subscribe({ next: setList });
-    // Posts captured from your own timeline in the last day, ranked by how fast they gather engagement.
+    // Posts captured from your own timeline, filtered to where a reply can still be seen and ranked by reach per minute.
     const hotSub = liveQuery(async () => {
-      const since = Date.now() - 24 * 3_600_000;
-      const recent = await services.db.tweets.where("created_at").above(since).toArray();
-      const ranked = hotPosts(recent, me.value?.id, Date.now(), 24 * 3_600_000, 30);
-      const users = await services.db.users.bulkGet([...new Set(ranked.map((h) => h.tweet.user_id_str))]);
-      return { ranked, users: new Map(users.filter((u): u is UserRow => !!u).map((u) => [u.id, u])) };
+      const db = services.db;
+      const since = Date.now() - radar.maxAgeHours * 3_600_000;
+      const recent = await db.tweets.where("created_at").above(since).toArray();
+      const authors = await db.users.bulkGet([...new Set(recent.map((t) => t.user_id_str))]);
+      const users = new Map(authors.filter((u): u is UserRow => !!u).map((u) => [u.id, u]));
+      const ranked = replyRadar(recent, users, me.value?.id, { maxAgeHours: radar.maxAgeHours, maxReplies: radar.fewReplies ? 5 : undefined, minAuthorFollowers: radar.biggerOnly ? myFollowers : undefined }, Date.now(), 30);
+      return { ranked, users };
     }).subscribe({ next: ({ ranked, users }) => { setHot(ranked); setHotUsers(users); } });
     return () => {
       sub.unsubscribe();
       hotSub.unsubscribe();
     };
-  }, []);
+  }, [radar.maxAgeHours, radar.fewReplies, radar.biggerOnly, myFollowers]);
+  const done = repliesToday(ownTweets.value);
+  const goal = settings.value.replyGoal;
+  const setRadar = (patch: Partial<typeof radar>) => void updateSettings({ radar: { ...radar, ...patch } });
+  const ageLabel = (m: number) => (m < 60 ? `${Math.round(m)}m` : `${Math.round(m / 60)}h`);
 
   const load = async (tl: TimelineRow, more = false) => {
     setFeed((f) => ({ ...(more ? f : { tweets: [], users: new Map<string, UserRow>() }), loading: true }));
@@ -112,15 +120,36 @@ export function Timelines() {
       <SectionTitle right={<button class="xl-btn text-[11px] py-[3px]" onClick={() => setCreating(true)}><Icon.plus size={12} /> New feed</button>}>Custom feeds</SectionTitle>
       {creating && <NewTimeline onDone={() => setCreating(false)} />}
       <button class="xl-card xl-card-2 flex items-center justify-between gap-2 text-left w-full" onClick={() => setShowHot(!showHot)} aria-expanded={showHot}>
-        <span>
+        <span class="min-w-0">
           <span class="font-semibold inline-flex items-center gap-1"><Icon.flame size={14} /> Worth replying to</span>
-          <span class="block text-xs xl-muted">Posts from your timeline gaining engagement fastest in the last 24 h · {hot.length}</span>
+          <span class="block text-xs xl-muted">Fresh posts from your timeline where a reply still gets seen · {hot.length}</span>
         </span>
-        <span class="xl-muted">{showHot ? "▾" : "▸"}</span>
+        <span class="flex items-center gap-2 shrink-0">
+          <span class="xl-pill" title="Replies you published today, against your daily goal (set it in the radar)" style={done >= goal ? { background: "rgba(34,197,94,0.15)", color: "#22c55e" } : undefined}>
+            <Icon.reply size={11} /> {done}/{goal}
+          </span>
+          <span class="xl-muted">{showHot ? "▾" : "▸"}</span>
+        </span>
       </button>
-      {showHot && (hot.length === 0 ? <EmptyState title="Nothing hot yet" hint="Scroll your home timeline for a bit; posts you see are ranked here by engagement per hour." /> : hot.map((h) => (
+      {showHot && (
+        <div class="xl-card xl-card-2 flex flex-wrap items-center gap-2 py-2 text-[11px]">
+          <div class="xl-seg" role="radiogroup" aria-label="Maximum age">
+            {[1, 3, 24].map((h) => (
+              <button key={h} role="radio" aria-checked={radar.maxAgeHours === h} aria-selected={radar.maxAgeHours === h} onClick={() => setRadar({ maxAgeHours: h })}>{`< ${h}h`}</button>
+            ))}
+          </div>
+          <button class={`xl-btn text-[11px] py-[3px] ${radar.fewReplies ? "active" : ""}`} aria-pressed={radar.fewReplies} title="At most 5 replies so far" onClick={() => setRadar({ fewReplies: !radar.fewReplies })}>Few replies</button>
+          <button class={`xl-btn text-[11px] py-[3px] ${radar.biggerOnly ? "active" : ""}`} aria-pressed={radar.biggerOnly} disabled={!myFollowers} title="Only accounts with more followers than you" onClick={() => setRadar({ biggerOnly: !radar.biggerOnly })}>Bigger than me</button>
+          <label class="ml-auto xl-metric xl-muted" title="Replies per day you aim for">
+            Goal <input class="xl-input w-12 py-[2px] px-1.5 text-[11px]" type="number" min={1} max={100} aria-label="Daily reply goal" value={goal} onChange={(e) => void updateSettings({ replyGoal: Math.max(1, Number((e.target as HTMLInputElement).value) || 10) })} />
+          </label>
+        </div>
+      )}
+      {showHot && (hot.length === 0 ? <EmptyState title="Nothing on the radar" hint="Scroll your home timeline for a bit, or relax the filters above. Posts you see are ranked by impressions per minute." /> : hot.map((h) => (
         <div key={h.tweet.id} class="relative">
-          <span class="absolute -top-2 left-3 z-10 xl-pill" style={{ background: "var(--xl-bg)", border: "1px solid var(--xl-border)" }} title="Engagements per hour">{Math.round(h.velocity)}/h</span>
+          <span class="absolute -top-2 left-3 z-10 xl-pill" style={{ background: "var(--xl-bg)", border: "1px solid var(--xl-border)" }} title={`${Math.round(h.perMinute)} impressions per minute · ${Math.round(h.velocity)} engagements per hour · posted ${ageLabel(h.ageMinutes)} ago`}>
+            {h.perMinute > 0 ? `${compactRate(h.perMinute)}/min` : `${Math.round(h.velocity)}/h`} · {ageLabel(h.ageMinutes)}
+          </span>
           <TweetCard tweet={h.tweet} screenName={hotUsers.get(h.tweet.user_id_str)?.screen_name ?? "i"} />
         </div>
       )))}
@@ -227,4 +256,8 @@ function NewTimeline({ onDone }: { onDone: () => void }) {
       </div>
     </div>
   );
+}
+
+function compactRate(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(Math.round(n));
 }

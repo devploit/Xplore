@@ -9,7 +9,7 @@ export const ROUTES: { id: Route; label: string; icon: IconName }[] = [
   { id: "tweets", label: "Posts", icon: "list" },
   { id: "mentions", label: "Mentions", icon: "bell" },
   { id: "timelines", label: "Feeds", icon: "layers" },
-  { id: "profile", label: "Profile", icon: "user" },
+  { id: "profile", label: "Sniper", icon: "crosshair" },
   { id: "settings", label: "Settings", icon: "gear" },
 ];
 

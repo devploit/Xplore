@@ -2,9 +2,10 @@ import { useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import type { Point } from "@/analytics";
 import { cumulative, halfChange, total } from "@/analytics";
-import { settings } from "../store";
+import { selectedBucket, settings } from "../store";
 import { compact } from "./format";
-import { LineChart } from "./LineChart";
+import { AnimatedNumber } from "./AnimatedNumber";
+import { LineChart, pointTitle } from "./LineChart";
 import { PosterModal } from "./Poster";
 import { Icon } from "./icons";
 import { CardLabel } from "./Section";
@@ -22,24 +23,30 @@ interface Props {
   format?: (n: number) => string;
   aside?: ComponentChildren;
   tall?: boolean;
+  /** same metric over the previous period, drawn dashed when settings.showCompare is on */
+  compare?: Point[] | undefined;
+  /** clicking a point opens the posts of that bucket */
+  drill?: boolean;
 }
 
-export function StatCard({ title, points, color, share, value, delta, format = compact, aside, tall = false }: Props) {
+export function StatCard({ title, points, color, share, value, delta, format = compact, aside, tall = false, compare, drill = true }: Props) {
   const [sharing, setSharing] = useState(false);
   const s = settings.value;
   const shown = s.cumulative ? cumulative(points) : points;
+  const shownCompare = s.showCompare && compare ? (s.cumulative ? cumulative(compare) : compare) : undefined;
+  const select = drill ? (i: number) => { const p = points[i]; if (p) selectedBucket.value = { start: p.start, end: p.end, title: `${title} · ${pointTitle(p)}` }; } : undefined;
   const big = value ?? total(points);
   const change = delta ?? halfChange(points);
   const body = (
     <div class={`relative ${tall ? "h-[150px]" : "h-[120px]"}`}>
       <div class="absolute inset-x-0 bottom-0 h-[62%] opacity-90">
-        <LineChart points={shown} color={color} height={tall ? 93 : 74} bare format={format} />
+        <LineChart points={shown} color={color} height={tall ? 93 : 74} bare format={format} compare={shownCompare} onSelect={select} />
       </div>
       <div class="relative flex items-start justify-between">
         <div>
           <CardLabel>{title}</CardLabel>
           <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-[28px] font-extrabold leading-none tracking-tight">{format(big)}</span>
+            <span class="text-[28px] font-extrabold leading-none tracking-tight tabular-nums"><AnimatedNumber value={big} format={format} /></span>
             {s.showChange && change !== 0 && (
               <span class={`text-[13px] font-semibold ${change > 0 ? "text-emerald-400" : "text-red-400"}`} title="Change: second half minus first half of the period">
                 {change > 0 ? "↑" : "↓"} {format(Math.abs(change))}
