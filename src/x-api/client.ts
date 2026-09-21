@@ -1,7 +1,7 @@
 import { csrfToken } from "@/data/identity";
-import type { XlyticsDb } from "@/data/db";
+import type { XploreDb } from "@/data/db";
 import { QueryIdRegistry } from "@/data/queryIds";
-import { parseLimitHeaders, type Limit } from "@/data/rateLimit";
+import { decide, MAX_REQUESTS_PER_MINUTE, parseLimitHeaders, type Limit } from "@/data/rateLimit";
 
 /** X's public web-client bearer, identical for every browser session. */
 export const WEB_BEARER = "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
@@ -22,7 +22,7 @@ export interface XResponse<T = unknown> {
 }
 
 export interface ClientDeps {
-  db: XlyticsDb;
+  db: XploreDb;
   fetch?: typeof fetch;
   cookie?: () => string;
   origin?: string;
@@ -51,6 +51,8 @@ export class XClient {
   private readonly cookie: () => string;
   private readonly origin: string;
   private readonly now: () => number;
+  /** timestamps of requests sent in the last minute, for the global ceiling */
+  private sent: number[] = [];
 
   constructor(private readonly deps: ClientDeps) {
     this.registry = new QueryIdRegistry(deps.db);
@@ -65,11 +67,30 @@ export class XClient {
     return row ? { limit: row.limit, remaining: row.remaining, reset: row.reset } : undefined;
   }
 
+  /**
+   * Refuses locally, without touching X, when the last known window for `op` is exhausted or when
+   * this tab already sent MAX_REQUESTS_PER_MINUTE requests in the last minute. Every caller goes
+   * through here, so single clicks are protected the same way paging jobs are.
+   */
+  private async guard(op: string): Promise<void> {
+    const now = this.now();
+    const known = await this.limitFor(op);
+    const verdict = decide(known, now, 0);
+    if (!verdict.ok) throw new XApiError("RateLimited", `Rate limit for ${op} is exhausted until it resets`, undefined, verdict.waitMs);
+    this.sent = this.sent.filter((t) => now - t < 60_000);
+    if (this.sent.length >= MAX_REQUESTS_PER_MINUTE) {
+      const waitMs = 60_000 - (now - this.sent[0]!);
+      throw new XApiError("RateLimited", `Local ceiling of ${MAX_REQUESTS_PER_MINUTE} requests per minute reached`, undefined, waitMs);
+    }
+    this.sent.push(now);
+  }
+
   async graphql<T = unknown>(op: string, variables: Record<string, unknown>): Promise<XResponse<T>> {
     const spec = await this.registry.resolve(op);
     if (!spec) throw new XApiError("StaleQueryId", `No query id known for ${op}; it becomes available once X performs it.`);
     const ct0 = csrfToken(this.cookie());
     if (!ct0) throw new XApiError("Unauthorized", "No X session cookie found.");
+    await this.guard(op);
     const headers: Record<string, string> = {
       authorization: WEB_BEARER,
       "x-csrf-token": ct0,

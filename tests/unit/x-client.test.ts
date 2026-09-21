@@ -1,19 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { XlyticsDb } from "@/data/db";
+import { XploreDb } from "@/data/db";
 import { XApiError, XClient } from "@/x-api/client";
 import { ops } from "@/x-api/operations";
 import { bottomCursor } from "@/x-api/cursor";
 import { SEED } from "@/data/queryIds";
+import { MAX_REQUESTS_PER_MINUTE } from "@/data/rateLimit";
 import * as fx from "../fixtures/builders";
 
 const COOKIE = "twid=u%3D42; ct0=CSRF";
+const NOW = Date.UTC(2026, 8, 17, 12);
 
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
 function makeClient(name: string, fetchImpl: typeof fetch) {
-  const db = new XlyticsDb(name);
+  const db = new XploreDb(name);
   const client = new XClient({ db, fetch: fetchImpl, cookie: () => COOKIE, origin: "https://x.com", now: () => 1_700_000_000_000 });
   return { db, client };
 }
@@ -92,5 +94,31 @@ describe("bottomCursor", () => {
     const body = fx.userTweetsResponse([fx.cursorEntry("TOP", "Top"), fx.itemEntry("t", fx.tweetResult("1", "42", "me")), fx.cursorEntry("BOTTOM", "Bottom")]);
     expect(bottomCursor(body)).toBe("BOTTOM");
     expect(bottomCursor(fx.userTweetsResponse([fx.cursorEntry("TOP", "Top")]))).toBeUndefined();
+  });
+});
+
+describe("local guards", () => {
+  it("refuses locally when the last known window for the operation is exhausted", async () => {
+    const db = new XploreDb("client-exhausted");
+    let calls = 0;
+    const client = new XClient({ db, fetch: (async () => { calls++; return new Response("{}", { status: 200 }); }) as unknown as typeof fetch, cookie: () => COOKIE, origin: "https://x.com", now: () => NOW });
+    await db.rateLimits.put({ endpoint: "UserTweets", limit: 50, remaining: 0, reset: Math.floor(NOW / 1000) + 600, updated_at: NOW });
+    await expect(client.graphql("UserTweets", { userId: "42" })).rejects.toMatchObject({ kind: "RateLimited", retryAfterMs: 600_000 });
+    expect(calls).toBe(0);
+    await db.delete();
+  });
+
+  it("caps requests per minute across operations and lets them through again a minute later", async () => {
+    const db = new XploreDb("client-ceiling");
+    let now = NOW;
+    let calls = 0;
+    const client = new XClient({ db, fetch: (async () => { calls++; return new Response(JSON.stringify({ data: {} }), { status: 200 }); }) as unknown as typeof fetch, cookie: () => COOKIE, origin: "https://x.com", now: () => now });
+    for (let i = 0; i < MAX_REQUESTS_PER_MINUTE; i++) await client.graphql("UserTweets", { userId: "42" });
+    await expect(client.graphql("SearchTimeline", { rawQuery: "x" })).rejects.toMatchObject({ kind: "RateLimited" });
+    expect(calls).toBe(MAX_REQUESTS_PER_MINUTE);
+    now += 61_000;
+    await client.graphql("SearchTimeline", { rawQuery: "x" });
+    expect(calls).toBe(MAX_REQUESTS_PER_MINUTE + 1);
+    await db.delete();
   });
 });

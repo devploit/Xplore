@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { XlyticsDb } from "@/data/db";
+import { describe, expect, it } from "vitest";
+import { XploreDb } from "@/data/db";
 import { Ingestor } from "@/data/ingest";
 import { acquireLease, releaseLease } from "@/data/jobs/lease";
 import { runBackfill, runFollowerSnapshot, runMentions, runPrune, DAY_MS } from "@/data/jobs/jobs";
@@ -12,7 +12,7 @@ const COOKIE = "twid=u%3D42; ct0=CSRF";
 const noSleep = async () => undefined;
 
 function setup(name: string, fetchImpl: (url: string, init?: RequestInit) => Promise<Response>) {
-  const db = new XlyticsDb(name);
+  const db = new XploreDb(name);
   const client = new XClient({ db, fetch: fetchImpl as unknown as typeof fetch, cookie: () => COOKIE, origin: "https://x.com", now: () => NOW });
   const ingestor = new Ingestor(db, () => "42");
   return { db, client, ingestor };
@@ -31,7 +31,7 @@ function pageOf(ids: string[], cursor?: string, ageDays = 1) {
 
 describe("lease", () => {
   it("lets one owner in and blocks others until release or expiry", async () => {
-    const db = new XlyticsDb("lease-test");
+    const db = new XploreDb("lease-test");
     expect(await acquireLease(db, "j", "A", NOW)).toBe(true);
     expect(await acquireLease(db, "j", "B", NOW)).toBe(false);
     expect(await acquireLease(db, "j", "A", NOW)).toBe(true);
@@ -53,6 +53,20 @@ describe("pageThrough", () => {
     await db.delete();
   });
 
+  it("reports the frontier as the oldest tweet of the deepest page, ignoring an old pinned post on page one", async () => {
+    // Page one carries a pinned post from 200 days ago; the walk's real reach is page two, 5 days back.
+    const pages = [pageOf(["pin"], "C1", 200), pageOf(["5"], "C2", 5), pageOf(["9"], undefined, 9)];
+    let i = 0;
+    const { db, client, ingestor } = setup("paging-frontier", async () => json({ data: (pages[i++] as { data: unknown }).data }));
+    const fetchPage = (c?: string) => import("@/x-api/operations").then((m) => m.ops.userTweets(client, "42", c));
+    const two = await pageThrough(db, client, ingestor, fetchPage, { op: "UserTweets", maxPages: 2, sleep: noSleep, now: () => NOW });
+    expect(two.stoppedBy).toBe("maxPages");
+    expect(two.frontier).toBe(NOW - 5 * DAY_MS);
+    const rest = await pageThrough(db, client, ingestor, fetchPage, { op: "UserTweets", maxPages: 5, cursor: two.cursor!, sleep: noSleep, now: () => NOW });
+    expect(rest).toMatchObject({ stoppedBy: "noCursor", frontier: NOW - 9 * DAY_MS });
+    await db.delete();
+  });
+
   it("stops before exhausting the rate limit and resumes later from the cursor", async () => {
     const headers = { "x-rate-limit-limit": "50", "x-rate-limit-remaining": "10", "x-rate-limit-reset": String(Math.floor(NOW / 1000) + 900) };
     const { db, client, ingestor } = setup("paging-limit", async () => json({ data: pageOf(["1"], "C1").data }, 200, headers));
@@ -62,21 +76,25 @@ describe("pageThrough", () => {
     await db.delete();
   });
 
-  it("retries 429 and 503 with backoff and gives up on 401", async () => {
-    const statuses = [503, 429, 200];
+  it("retries 503 with backoff, stops on 429 without retrying, and gives up on 401", async () => {
+    const statuses = [503, 200];
     let i = 0;
-    const sleep = vi.fn(async () => undefined);
     const { db, client, ingestor } = setup("paging-retry", async () => json({ data: pageOf(["1"]).data }, statuses[i++] ?? 200));
-    const { ops } = await import("@/x-api/operations");
-    const res = await pageThrough(db, client, ingestor, (c) => ops.userTweets(client, "42", c), { op: "UserTweets", maxPages: 3, sleep, now: () => NOW });
-    expect(res.stoppedBy).toBe("noCursor");
-    expect(res.pages).toBe(1);
-    expect(sleep).toHaveBeenCalledTimes(2);
-    const { db: db2, client: c2, ingestor: in2 } = setup("paging-401", async () => json({}, 401));
-    const r2 = await pageThrough(db2, c2, in2, (c) => ops.userTweets(c2, "42", c), { op: "UserTweets", maxPages: 3, sleep: noSleep, now: () => NOW });
-    expect(r2.stoppedBy).toBe("unauthorized");
-    await db.delete();
-    await db2.delete();
+    const fetchPage = () => import("@/x-api/operations").then((m) => m.ops.userTweets(client, "42"));
+    const ok = await pageThrough(db, client, ingestor, fetchPage, { op: "UserTweets", maxPages: 1, sleep: noSleep, now: () => NOW });
+    expect(ok).toMatchObject({ pages: 1, newTweets: 1 });
+    expect(i).toBe(2);
+
+    let calls = 0;
+    const limited = setup("paging-429", async () => { calls++; return json({}, 429); });
+    const stopped = await pageThrough(limited.db, limited.client, limited.ingestor, () => import("@/x-api/operations").then((m) => m.ops.userTweets(limited.client, "42")), { op: "UserTweets", maxPages: 5, sleep: noSleep, now: () => NOW });
+    expect(stopped).toMatchObject({ pages: 0, stoppedBy: "rateLimit" });
+    expect(calls).toBe(1);
+
+    const denied = setup("paging-401", async () => json({}, 401));
+    const res = await pageThrough(denied.db, denied.client, denied.ingestor, () => import("@/x-api/operations").then((m) => m.ops.userTweets(denied.client, "42")), { op: "UserTweets", maxPages: 5, sleep: noSleep, now: () => NOW });
+    expect(res.stoppedBy).toBe("unauthorized");
+    await Promise.all([db.delete(), limited.db.delete(), denied.db.delete()]);
   });
 
   it("stops when pages are older than the minimum date or add nothing new", async () => {
@@ -146,7 +164,7 @@ describe("jobs", () => {
   });
 
   it("prune deletes old foreign tweets but keeps own and referenced ones", async () => {
-    const db = new XlyticsDb("job-prune");
+    const db = new XploreDb("job-prune");
     const ingestor = new Ingestor(db, () => "42");
     const old = new Date(NOW - 200 * DAY_MS).toUTCString().replace(/,/, "");
     await ingestor.ingestBody(

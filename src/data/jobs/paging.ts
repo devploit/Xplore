@@ -1,4 +1,4 @@
-import type { XlyticsDb } from "../db";
+import type { XploreDb } from "../db";
 import type { Ingestor } from "../ingest";
 import { backoff, decide, MAX_ATTEMPTS, pageDelay } from "../rateLimit";
 import { XApiError, type XClient } from "@/x-api/client";
@@ -24,6 +24,8 @@ export interface PagingResult {
   pages: number;
   newTweets: number;
   cursor?: string;
+  /** oldest created_at seen in the deepest page fetched; how far back the walk has reached */
+  frontier?: number;
   stoppedBy: "maxPages" | "noCursor" | "noNew" | "tooOld" | "rateLimit" | "error" | "unauthorized";
   error?: string;
 }
@@ -34,29 +36,34 @@ const defaultSleep: Sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Generic paginator shared by every timeline job: fetches pages, ingests them, obeys rate limits,
  * retries transient failures with backoff and stops on the conditions requested by the caller.
  */
-export async function pageThrough(db: XlyticsDb, client: XClient, ingestor: Ingestor, fetchPage: (cursor?: string) => Promise<Page>, opts: PagingOptions): Promise<PagingResult> {
+export async function pageThrough(db: XploreDb, client: XClient, ingestor: Ingestor, fetchPage: (cursor?: string) => Promise<Page>, opts: PagingOptions): Promise<PagingResult> {
   const sleep = opts.sleep ?? defaultSleep;
   const now = opts.now ?? (() => Date.now());
   let cursor = opts.cursor;
   let pages = 0;
   let newTweets = 0;
   let attempt = 0;
+  let frontier: number | undefined;
+  const done = (r: Omit<PagingResult, "frontier">): PagingResult => (frontier === undefined ? r : { ...r, frontier });
   while (pages < opts.maxPages) {
     const limit = await client.limitFor(opts.op);
     const decision = decide(limit, now());
-    if (!decision.ok) return { pages, newTweets, stoppedBy: "rateLimit", ...(cursor ? { cursor } : {}) };
+    if (!decision.ok) return done({ pages, newTweets, stoppedBy: "rateLimit", ...(cursor ? { cursor } : {}) });
     let page: Page;
     try {
       page = await fetchPage(cursor);
       attempt = 0;
     } catch (err) {
-      if (err instanceof XApiError && (err.kind === "RateLimited" || err.kind === "Unavailable" || err.kind === "Network") && attempt < MAX_ATTEMPTS) {
+      // A rate limit, from X or from the local ceiling, ends the run: the cursor is kept and a later
+      // run continues. Hammering an endpoint that already said no is exactly what gets accounts flagged.
+      if (err instanceof XApiError && err.kind === "RateLimited") return done({ pages, newTweets, stoppedBy: "rateLimit", ...(cursor ? { cursor } : {}) });
+      if (err instanceof XApiError && (err.kind === "Unavailable" || err.kind === "Network") && attempt < MAX_ATTEMPTS) {
         attempt += 1;
         await sleep(err.retryAfterMs ?? backoff(attempt));
         continue;
       }
       const stoppedBy = err instanceof XApiError && err.kind === "Unauthorized" ? "unauthorized" : "error";
-      return { pages, newTweets, stoppedBy, error: err instanceof Error ? err.message : String(err), ...(cursor ? { cursor } : {}) };
+      return done({ pages, newTweets, stoppedBy, error: err instanceof Error ? err.message : String(err), ...(cursor ? { cursor } : {}) });
     }
     pages += 1;
     const before = await db.tweets.count();
@@ -65,20 +72,21 @@ export async function pageThrough(db: XlyticsDb, client: XClient, ingestor: Inge
     const added = after - before;
     newTweets += added;
     const next = bottomCursor(page.body);
+    // The deepest page's oldest tweet is the frontier; a pinned post only appears on the first page,
+    // so it cannot drag the frontier back once a second page has been read.
+    const oldest = result.tweets > 0 ? await oldestCreatedAtInBody(db, page.body) : undefined;
+    if (oldest !== undefined) frontier = oldest;
     await opts.onProgress?.(pages, next);
-    if (!next || next === cursor) return { pages, newTweets, stoppedBy: "noCursor" };
+    if (!next || next === cursor) return done({ pages, newTweets, stoppedBy: "noCursor" });
     cursor = next;
-    if (opts.stopWhenNoNew && added === 0) return { pages, newTweets, stoppedBy: "noNew", cursor };
-    if (opts.minCreatedAt !== undefined && result.tweets > 0) {
-      const oldest = await oldestCreatedAtInBody(db, page.body);
-      if (oldest !== undefined && oldest < opts.minCreatedAt) return { pages, newTweets, stoppedBy: "tooOld", cursor };
-    }
+    if (opts.stopWhenNoNew && added === 0) return done({ pages, newTweets, stoppedBy: "noNew", cursor });
+    if (opts.minCreatedAt !== undefined && oldest !== undefined && oldest < opts.minCreatedAt) return done({ pages, newTweets, stoppedBy: "tooOld", cursor });
     if (pages < opts.maxPages) await sleep(pageDelay(pages));
   }
-  return { pages, newTweets, stoppedBy: "maxPages", ...(cursor ? { cursor } : {}) };
+  return done({ pages, newTweets, stoppedBy: "maxPages", ...(cursor ? { cursor } : {}) });
 }
 
-async function oldestCreatedAtInBody(db: XlyticsDb, body: unknown): Promise<number | undefined> {
+async function oldestCreatedAtInBody(db: XploreDb, body: unknown): Promise<number | undefined> {
   const ids = collectTweetIds(body);
   if (!ids.length) return undefined;
   const rows = await db.tweets.bulkGet(ids);
