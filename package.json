@@ -2,6 +2,7 @@
   "name": "xplore",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Fully local X (Twitter) analytics sidebar. No third-party servers.",
   "type": "module",
   "engines": {

@@ -171,3 +171,5 @@ Xplore learns the identifiers X uses while you browse, so most changes are picke
 ## Credits
 
 Made by [@devploit](https://x.com/devploit). Questions, ideas and bug reports are welcome there.
+
+Released under the [MIT License](LICENSE).
