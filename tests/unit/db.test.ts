@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { XlyticsDb, type TweetRow } from "@/data/db";
+import { XploreDb, type TweetRow } from "@/data/db";
 
 function tweet(id: string, overrides: Partial<TweetRow> = {}): TweetRow {
   return {
@@ -22,9 +22,9 @@ function tweet(id: string, overrides: Partial<TweetRow> = {}): TweetRow {
   };
 }
 
-describe("XlyticsDb", () => {
+describe("XploreDb", () => {
   it("round-trips tweets and queries by compound index", async () => {
-    const db = new XlyticsDb("test-db-roundtrip");
+    const db = new XploreDb("test-db-roundtrip");
     await db.tweets.bulkPut([tweet("1"), tweet("2", { created_at: 1_700_000_100_000 }), tweet("3", { user_id_str: "7" })]);
     const mine = await db.tweets.where("[user_id_str+created_at]").between(["42", 0], ["42", Infinity]).toArray();
     expect(mine.map((t) => t.id).sort()).toEqual(["1", "2"]);
@@ -32,7 +32,7 @@ describe("XlyticsDb", () => {
   });
 
   it("stores one follower snapshot per user and day", async () => {
-    const db = new XlyticsDb("test-db-snapshots");
+    const db = new XploreDb("test-db-snapshots");
     const row = { user_id: "42", day: "2026-09-17", followers_count: 10, following_count: 5, statuses_count: 1, taken_at: 1 };
     await db.followerSnapshots.put(row);
     await db.followerSnapshots.put({ ...row, followers_count: 11 });

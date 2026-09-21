@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { XlyticsDb } from "@/data/db";
+import { XploreDb } from "@/data/db";
 import { Ingestor, localDay } from "@/data/ingest";
 import { makeMessage, type GraphqlMessage } from "@/shared/messages";
 import * as fx from "../fixtures/builders";
@@ -12,7 +12,7 @@ function msg(op: string, body: unknown, status = 200): GraphqlMessage {
 
 describe("Ingestor", () => {
   it("stores tweets and users and records the observed query id", async () => {
-    const db = new XlyticsDb("ingest-basic");
+    const db = new XploreDb("ingest-basic");
     const ing = new Ingestor(db, () => "42");
     const res = await ing.ingestMessage(msg("UserTweets", fx.userTweetsResponse([fx.itemEntry("t1", fx.tweetResult("1", "42", "me"))])), NOW);
     expect(res).toEqual({ tweets: 1, users: 1, snapshot: true });
@@ -22,7 +22,7 @@ describe("Ingestor", () => {
   });
 
   it("writes one follower snapshot per day for the current user only", async () => {
-    const db = new XlyticsDb("ingest-snapshot");
+    const db = new XploreDb("ingest-snapshot");
     const ing = new Ingestor(db, () => "42");
     await ing.ingestMessage(msg("UserByScreenName", fx.userByScreenNameResponse("42", "me")), NOW);
     await ing.ingestMessage(msg("UserByScreenName", fx.userByScreenNameResponse("42", "me")), NOW + 1000);
@@ -34,7 +34,7 @@ describe("Ingestor", () => {
   });
 
   it("records the query id but stores nothing for error responses", async () => {
-    const db = new XlyticsDb("ingest-error");
+    const db = new XploreDb("ingest-error");
     const ing = new Ingestor(db, () => "42");
     const res = await ing.ingestMessage(msg("UserTweets", { errors: [{ message: "x" }] }, 404), NOW);
     expect(res).toEqual({ tweets: 0, users: 0, snapshot: false });
@@ -43,7 +43,7 @@ describe("Ingestor", () => {
   });
 
   it("newer counters overwrite older rows", async () => {
-    const db = new XlyticsDb("ingest-merge");
+    const db = new XploreDb("ingest-merge");
     const ing = new Ingestor(db, () => undefined);
     await ing.ingestBody(fx.userTweetsResponse([fx.itemEntry("t1", fx.tweetResult("1", "42", "me", { favorite_count: 1 }))]), NOW);
     await ing.ingestBody(fx.userTweetsResponse([fx.itemEntry("t1", fx.tweetResult("1", "42", "me", { favorite_count: 5 }))]), NOW + 1);

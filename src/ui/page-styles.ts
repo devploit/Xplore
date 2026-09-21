@@ -6,9 +6,9 @@ body.xl-open main[role="main"] { margin-right: 0; }
 `;
 
 export function ensurePageStyles(doc: Document = document): void {
-  if (doc.getElementById("x-lytics-page-css")) return;
+  if (doc.getElementById("xplore-page-css")) return;
   const style = doc.createElement("style");
-  style.id = "x-lytics-page-css";
+  style.id = "xplore-page-css";
   style.textContent = PAGE_CSS;
   doc.head.appendChild(style);
 }

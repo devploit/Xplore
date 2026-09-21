@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "x-lytics",
+  "name": "Xplore",
   "version": "0.1.0",
   "description": "Fully local X (Twitter) analytics sidebar. No third-party servers.",
   "minimum_chrome_version": "111",

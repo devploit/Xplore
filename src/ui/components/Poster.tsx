@@ -58,7 +58,7 @@ export function PosterModal({ title, children, onClose }: { title: string; child
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `x-lytics-${me.value?.screen_name ?? "me"}-${title.toLowerCase().replace(/\W+/g, "-")}.png`;
+    a.download = `xplore-${me.value?.screen_name ?? "me"}-${title.toLowerCase().replace(/\W+/g, "-")}.png`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };

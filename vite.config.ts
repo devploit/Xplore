@@ -10,7 +10,7 @@ import type { Plugin } from "vite";
  */
 function asciiOnly(): Plugin {
   return {
-    name: "x-lytics-ascii-only",
+    name: "xplore-ascii-only",
     generateBundle(_options, bundle) {
       for (const chunk of Object.values(bundle)) {
         if (chunk.type !== "chunk") continue;

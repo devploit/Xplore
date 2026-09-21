@@ -1,4 +1,4 @@
-import type { QueryIdRow, XlyticsDb } from "./db";
+import type { QueryIdRow, XploreDb } from "./db";
 import { FEATURES_A, FEATURES_A2, FEATURES_LIST_TL, FEATURES_MIN, FEATURES_USER } from "@/x-api/features";
 
 export interface QuerySpec {
@@ -49,7 +49,7 @@ const FAMILY: Record<string, string[]> = {
 };
 
 export class QueryIdRegistry {
-  constructor(private readonly db: XlyticsDb) {}
+  constructor(private readonly db: XploreDb) {}
 
   /** Records what X was seen using. Called by ingestion for every intercepted response. */
   async observe(op: string, queryId: string, features?: Record<string, boolean>, fieldToggles?: Record<string, boolean>, now: number = Date.now()): Promise<void> {

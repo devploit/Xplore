@@ -3,7 +3,7 @@
  * through window.postMessage. Every message carries `source` and `v` so the sidebar can
  * reject anything X itself (or another extension) might post.
  */
-export const MESSAGE_SOURCE = "x-lytics" as const;
+export const MESSAGE_SOURCE = "xplore" as const;
 export const MESSAGE_VERSION = 1 as const;
 
 interface Base {

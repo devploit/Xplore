@@ -2,8 +2,8 @@
 
 Sources (prettified webpack bundles):
 
-- `L` = `/private/tmp/claude-503/-Users-dpua-Projects-x-lytics/1c213968-42fb-4edc-90c9-f7f35f2318b8/scratchpad/superx/js/listener.pretty.js` (9,979 lines)
-- `C` = `/private/tmp/claude-503/-Users-dpua-Projects-x-lytics/1c213968-42fb-4edc-90c9-f7f35f2318b8/scratchpad/superx/js/content.pretty.js` (332,211 lines)
+- `L` = `superx/js/listener.pretty.js` (pretty-printed SuperX bundle, kept out of the repo) (9,979 lines)
+- `C` = `superx/js/content.pretty.js` (pretty-printed SuperX bundle, kept out of the repo) (332,211 lines)
 
 `L:123` means listener.pretty.js line 123; `C:123` means content.pretty.js line 123.
 

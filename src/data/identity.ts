@@ -1,4 +1,4 @@
-import type { UserRow, XlyticsDb } from "./db";
+import type { UserRow, XploreDb } from "./db";
 
 /** X stores the logged-in user id in the readable `twid` cookie as `u%3D<id>` (or `u=<id>`). */
 export function currentUserId(cookie: string = document.cookie): string | undefined {
@@ -14,7 +14,7 @@ export function csrfToken(cookie: string = document.cookie): string | undefined 
   return match?.[1] || undefined;
 }
 
-export async function currentUser(db: XlyticsDb, cookie?: string): Promise<UserRow | undefined> {
+export async function currentUser(db: XploreDb, cookie?: string): Promise<UserRow | undefined> {
   const id = currentUserId(cookie);
   return id ? db.users.get(id) : undefined;
 }

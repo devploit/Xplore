@@ -13,7 +13,7 @@ import { captured, initStore, jobStatus, settings, theme } from "./store";
 import { observeTheme } from "./theme";
 import { watchXRoute } from "./xroute";
 
-const HOST_ID = "x-lytics-root";
+const HOST_ID = "xplore-root";
 
 async function bootstrap(): Promise<void> {
   if (document.getElementById(HOST_ID)) return;

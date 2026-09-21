@@ -1,9 +1,12 @@
 {
-  "name": "x-lytics",
+  "name": "xplore",
   "version": "0.1.0",
   "private": true,
   "description": "Fully local X (Twitter) analytics sidebar. No third-party servers.",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite build --watch --mode sidebar",
     "build": "rm -rf dist && vite build --mode interceptor && vite build --mode sidebar && cp manifest.json dist/ && cp -R public/. dist/",
@@ -11,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "npm run typecheck && npm test && npm run build && vitest run --config vitest.build.config.ts",
+    "package": "npm run build && node scripts/package.mjs",
     "e2e": "node scripts/e2e/run.mjs dist 22000"
   },
   "dependencies": {

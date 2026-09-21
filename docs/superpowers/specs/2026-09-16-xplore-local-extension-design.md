@@ -1,4 +1,4 @@
-# x-lytics: fully local X (Twitter) analytics sidebar
+# Xplore: fully local X (Twitter) analytics sidebar
 
 Date: 2026-09-16. Status: approved design, pending implementation plan.
 
@@ -54,7 +54,7 @@ The extension CSP (`content_security_policy.extension_pages`) is `script-src 'se
 Wraps `window.fetch` and `XMLHttpRequest.prototype.open` and `send` before X's own bundle runs. For every response whose URL matches `^/i/api/graphql/([^/]+)/([A-Za-z0-9_]+)` it:
 
 1. Parses `queryId` and `operationName` from the URL and the `features` and `fieldToggles` query parameters (GET) or JSON body (POST).
-2. Clones the response, parses the JSON, and posts `{ source: "x-lytics", v: 1, kind: "graphql", op, queryId, features, fieldToggles, status, body }` with `window.postMessage(msg, location.origin)`.
+2. Clones the response, parses the JSON, and posts `{ source: "xplore", v: 1, kind: "graphql", op, queryId, features, fieldToggles, status, body }` with `window.postMessage(msg, location.origin)`.
 3. Never reads cookies, never issues requests, never mutates the response seen by X.
 
 Payloads larger than 8 MB are dropped with a `kind: "dropped"` message so the sidebar can log it. Errors inside the wrapper are swallowed so X keeps working even if the wrapper fails.
@@ -63,9 +63,9 @@ REST endpoints under `/i/api/1.1/*` and `/i/api/2/*` are not intercepted in v1; 
 
 ### 3.3 Sidebar (ISOLATED world)
 
-Mounts a host element `div#x-lytics-root` appended to `document.body` with an open shadow root. All UI, styles and fonts render inside the shadow root. The host element carries `position: fixed; right: 0; top: 0; z-index` above X's layers. Layout classes on `document.body` (`xl-hide-sidebar`, `xl-hide-dm`, `xl-close-to-main`) hide X's `[data-testid=sidebarColumn]` and `[data-testid=DMDrawer]` through a small stylesheet injected into `document.head`; this is the only CSS that leaves the shadow root.
+Mounts a host element `div#xplore-root` appended to `document.body` with an open shadow root. All UI, styles and fonts render inside the shadow root. The host element carries `position: fixed; right: 0; top: 0; z-index` above X's layers. Layout classes on `document.body` (`xl-hide-sidebar`, `xl-hide-dm`, `xl-close-to-main`) hide X's `[data-testid=sidebarColumn]` and `[data-testid=DMDrawer]` through a small stylesheet injected into `document.head`; this is the only CSS that leaves the shadow root.
 
-Message handling: a single `window` `message` listener accepts only events where `event.source === window`, `event.origin === location.origin`, `data.source === "x-lytics"` and `data.v === 1`, then validates the shape with a hand-written guard before passing the payload to the ingestion pipeline. Anything else is ignored silently.
+Message handling: a single `window` `message` listener accepts only events where `event.source === window`, `event.origin === location.origin`, `data.source === "xplore"` and `data.v === 1`, then validates the shape with a hand-written guard before passing the payload to the ingestion pipeline. Anything else is ignored silently.
 
 ### 3.4 Data layer
 
@@ -148,7 +148,7 @@ Preact with `@preact/signals` for state, a small in-memory router with routes `/
 
 Tweet text is rendered as text nodes with entity ranges turned into `<a>` elements for URLs, mentions and hashtags; no `innerHTML`.
 
-In-page navigation reuses the router-capture contract SuperX uses: the interceptor traps `Object.prototype.history` assignment to capture X's router instance as `window.__xlRouter` and answers `{ source: "x-lytics", kind: "navigate", path }` messages from the sidebar with `router.navigate(path)`. If the router is not captured, the sidebar falls back to `history.pushState` plus a synthetic `popstate`.
+In-page navigation reuses the router-capture contract SuperX uses: the interceptor traps `Object.prototype.history` assignment to capture X's router instance as `window.__xlRouter` and answers `{ source: "xplore", kind: "navigate", path }` messages from the sidebar with `router.navigate(path)`. If the router is not captured, the sidebar falls back to `history.pushState` plus a synthetic `popstate`.
 
 ### 3.11 Security properties
 
@@ -162,7 +162,7 @@ In-page navigation reuses the router-capture contract SuperX uses: the intercept
 ## 4. Project structure
 
 ```
-x-lytics/
+xplore/
   manifest.json
   package.json
   vite.config.ts            two IIFE entries, no extension plugin
