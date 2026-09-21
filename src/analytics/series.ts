@@ -5,6 +5,7 @@ export type Metric = "view_count" | "favorite_count" | "retweet_count" | "reply_
 /** Per-bucket count of tweets, or sum of a metric when `field` is given. */
 export function series(tweets: Tweet[], buckets: Bucket[], field?: Metric): Point[] {
   const values = new Array<number>(buckets.length).fill(0);
+  const counts = new Array<number>(buckets.length).fill(0);
   if (!buckets.length) return [];
   const first = buckets[0]!.start;
   const last = buckets[buckets.length - 1]!.end;
@@ -19,8 +20,9 @@ export function series(tweets: Tweet[], buckets: Bucket[], field?: Metric): Poin
       else hi = mid;
     }
     values[lo]! += field ? t[field] || 0 : 1;
+    counts[lo]! += 1;
   }
-  return buckets.map((b, i) => ({ label: b.label, start: b.start, end: b.end, value: values[i]! }));
+  return buckets.map((b, i) => ({ label: b.label, start: b.start, end: b.end, value: values[i]!, count: counts[i]! }));
 }
 
 export function total(points: Point[]): number {
@@ -68,4 +70,12 @@ export function engagementRate(tweets: Tweet[]): number | undefined {
 
 export function tweetEngagementRate(t: Tweet): number | undefined {
   return t.view_count > 0 ? engagements(t) / t.view_count : undefined;
+}
+
+/** Median of per-tweet engagement rates over tweets that have impressions. */
+export function medianEngagementRate(tweets: Tweet[]): number | undefined {
+  const rates = tweets.map(tweetEngagementRate).filter((r): r is number => r !== undefined).sort((a, b) => a - b);
+  if (!rates.length) return undefined;
+  const mid = rates.length >> 1;
+  return rates.length % 2 ? rates[mid]! : (rates[mid - 1]! + rates[mid]!) / 2;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TweetRow } from "@/data/db";
-import { bestTimes, hashtagStats, hotPosts, lengthStats, streak } from "@/analytics";
+import { bestTimes, bestTimesRobust, hashtagStats, hotPosts, lengthStats, streak } from "@/analytics";
 
 const NOW = new Date(2026, 8, 17, 12).getTime();
 const DAY = 86_400_000;
@@ -19,6 +19,24 @@ describe("bestTimes", () => {
     const d = new Date(NOW);
     expect(best[0]).toMatchObject({ weekday: (d.getDay() + 6) % 7, hour: d.getHours(), count: 2, avgImpressions: 2000 });
     expect(best[1]?.avgImpressions).toBe(10);
+  });
+});
+
+describe("bestTimesRobust", () => {
+  it("prefers slots with two or more posts so one viral post cannot top the list", () => {
+    // Two posts in the same slot a week apart, plus a lone viral post three hours earlier.
+    const same = [tw("1", 0, { view_count: 1000 }), tw("2", 7 * DAY, { view_count: 3000 })];
+    const viral = tw("v", 3 * HOUR, { view_count: 100_000 });
+    const filler = [tw("3", DAY, { view_count: 50 }), tw("4", 8 * DAY, { view_count: 70 }), tw("5", 2 * DAY, { view_count: 5 }), tw("6", 9 * DAY, { view_count: 9 })];
+    const strict = bestTimesRobust([...same, viral, ...filler], 3);
+    expect(strict.minCount).toBe(2);
+    expect(strict.slots[0]?.avgImpressions).toBe(2000);
+    expect(strict.slots.some((s) => s.avgImpressions === 100_000)).toBe(false);
+  });
+  it("falls back to single posts and says so when the data is thin", () => {
+    const thin = bestTimesRobust([tw("1", 0, { view_count: 10 }), tw("2", 5 * HOUR, { view_count: 20 })], 3);
+    expect(thin.minCount).toBe(1);
+    expect(thin.slots).toHaveLength(2);
   });
 });
 

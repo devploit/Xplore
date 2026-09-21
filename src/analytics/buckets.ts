@@ -52,3 +52,27 @@ export function bucketsForPeriod(days: number, now: number = Date.now(), allTime
   const start = days < 0 ? (allTimeStart ?? periodStart(365, now)) : periodStart(days - 1, now);
   return { buckets: makeBuckets(start, now, "day"), interval: "day", start };
 }
+
+/** Buckets for an explicit local range: hourly when it fits in one day, daily otherwise. */
+export function bucketsForRange(start: number, end: number): { buckets: Bucket[]; interval: Interval; start: number } {
+  const from = new Date(start);
+  from.setHours(0, 0, 0, 0);
+  const interval: Interval = end - from.getTime() <= DAY_MS ? "hour" : "day";
+  return { buckets: makeBuckets(from.getTime(), end, interval), interval, start: from.getTime() };
+}
+
+/**
+ * The period of equal length that ends where `buckets` begin, in the same interval.
+ * Used to draw last period's line behind the current one.
+ */
+export function previousBuckets(buckets: Bucket[], interval: Interval): Bucket[] {
+  if (!buckets.length) return [];
+  const first = buckets[0]!;
+  const cursor = new Date(first.start);
+  for (let i = 0; i < buckets.length; i++) {
+    if (interval === "day") cursor.setDate(cursor.getDate() - 1);
+    else cursor.setHours(cursor.getHours() - 1);
+  }
+  const prev = makeBuckets(cursor.getTime(), first.start - 1, interval);
+  return prev.slice(-buckets.length);
+}

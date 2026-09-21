@@ -60,6 +60,8 @@ export function normalizeUser(result: Rec, now: number): UserRow | undefined {
     statuses_count: num(legacy.statuses_count),
     updated_at: now,
   };
+  // Users embedded in tweets often come without counters; zeros here are placeholders, not facts.
+  if (legacy.followers_count === undefined) row.partial = true;
   const description = str(legacy.description);
   if (description !== undefined) row.description = description;
   const created = parseXDate(core.created_at ?? legacy.created_at);

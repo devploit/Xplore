@@ -62,6 +62,8 @@ export interface UserRow {
   profile_image_url_https?: string;
   is_blue_verified?: boolean;
   verified?: boolean;
+  /** true when X sent this user without counters (embedded in a tweet); counts are placeholders */
+  partial?: boolean;
   updated_at: number;
 }
 
@@ -127,7 +129,29 @@ export interface SettingRow {
   value: unknown;
 }
 
-export class XlyticsDb extends Dexie {
+/** The user's follower count each time X reported it, so gains can be matched to posts. */
+export interface FollowerPointRow {
+  user_id: string;
+  /** epoch ms */
+  taken_at: number;
+  followers_count: number;
+}
+
+/** Counters of one of the user's own tweets at one moment, so recent posts get a curve. */
+export interface TweetMetricRow {
+  tweet_id: string;
+  /** epoch ms */
+  taken_at: number;
+  view_count: number;
+  favorite_count: number;
+  retweet_count: number;
+  reply_count: number;
+  quote_count: number;
+  bookmark_count: number;
+}
+
+
+export class XploreDb extends Dexie {
   tweets!: EntityTable<TweetRow, "id">;
   users!: EntityTable<UserRow, "id">;
   followerSnapshots!: EntityTable<FollowerSnapshotRow, "user_id">;
@@ -136,7 +160,10 @@ export class XlyticsDb extends Dexie {
   backfill!: EntityTable<BackfillRow, "key">;
   timelines!: EntityTable<TimelineRow, "id">;
   settings!: EntityTable<SettingRow, "key">;
+  tweetMetrics!: EntityTable<TweetMetricRow, "tweet_id">;
+  followerPoints!: EntityTable<FollowerPointRow, "user_id">;
 
+  // The IndexedDB name predates the rename to Xplore; changing it would orphan every user's data.
   constructor(name = "xlytics") {
     super(name);
     this.version(1).stores({
@@ -149,13 +176,41 @@ export class XlyticsDb extends Dexie {
       timelines: "id, created_at",
       settings: "key",
     });
+    this.version(2).stores({
+      tweetMetrics: "[tweet_id+taken_at], tweet_id, taken_at",
+    });
+    // Post detail lists the replies to a post, which needs an index on the parent id.
+    this.version(3).stores({
+      tweets: "id, user_id_str, created_at, conversation_id_str, in_reply_to_user_id_str, in_reply_to_status_id_str, quoted_status_id_str, [user_id_str+created_at]",
+    });
+    this.version(4).stores({
+      followerPoints: "[user_id+taken_at], user_id, taken_at",
+    });
+    // Repairs data written before partial users were recognised: bogus zero follower counts.
+    this.version(5).stores({}).upgrade(async (tx) => {
+      const points = tx.table<FollowerPointRow>("followerPoints");
+      const snaps = tx.table<FollowerSnapshotRow>("followerSnapshots");
+      const users = tx.table<UserRow>("users");
+      const nonZeroUsers = new Set<string>();
+      await points.each((p) => { if (p.followers_count > 0) nonZeroUsers.add(p.user_id); });
+      await snaps.each((sn) => { if (sn.followers_count > 0) nonZeroUsers.add(sn.user_id); });
+      for (const userId of nonZeroUsers) {
+        await points.where("user_id").equals(userId).filter((p) => p.followers_count === 0).delete();
+        await snaps.where("user_id").equals(userId).filter((sn) => sn.followers_count === 0).delete();
+        const user = await users.get(userId);
+        if (user && user.followers_count === 0) {
+          const latest = (await snaps.where("user_id").equals(userId).sortBy("taken_at")).pop();
+          if (latest) await users.put({ ...user, followers_count: latest.followers_count, friends_count: latest.following_count, statuses_count: latest.statuses_count });
+        }
+      }
+    });
   }
 }
 
-let instance: XlyticsDb | undefined;
+let instance: XploreDb | undefined;
 
-/** Shared database instance for the sidebar. Tests create their own with `new XlyticsDb(name)`. */
-export function getDb(): XlyticsDb {
-  instance ??= new XlyticsDb();
+/** Shared database instance for the sidebar. Tests create their own with `new XploreDb(name)`. */
+export function getDb(): XploreDb {
+  instance ??= new XploreDb();
   return instance;
 }

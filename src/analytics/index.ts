@@ -8,3 +8,6 @@ export * from "./ranking";
 export * from "./heatmaps";
 export * from "./earnings";
 export * from "./insights";
+export * from "./curve";
+export * from "./threads";
+export * from "./growth";

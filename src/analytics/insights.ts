@@ -21,6 +21,21 @@ export function bestTimes(tweets: Tweet[], n = 3, minCount = 1): TimeSlot[] {
   return slots.sort((a, b) => b.avgImpressions - a.avgImpressions || b.count - a.count).slice(0, n);
 }
 
+export interface BestTimes {
+  slots: TimeSlot[];
+  /** posts required per slot; 1 means the data was too thin and single posts were allowed */
+  minCount: number;
+}
+
+/**
+ * The one ranking both pages use: slots with at least two posts, so one viral post cannot crown
+ * its hour; when fewer than `n` such slots exist, single posts are allowed and `minCount` says so.
+ */
+export function bestTimesRobust(tweets: Tweet[], n = 3): BestTimes {
+  const strict = bestTimes(tweets, n, 2);
+  return strict.length >= n ? { slots: strict, minCount: 2 } : { slots: bestTimes(tweets, n, 1), minCount: 1 };
+}
+
 export interface Streak {
   current: number;
   longest: number;

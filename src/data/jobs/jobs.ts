@@ -1,4 +1,4 @@
-import type { XlyticsDb } from "../db";
+import type { XploreDb } from "../db";
 import type { Ingestor } from "../ingest";
 import { localDay } from "../ingest";
 import { XApiError, type XClient } from "@/x-api/client";
@@ -6,7 +6,7 @@ import { ops } from "@/x-api/operations";
 import { pageThrough, type PagingResult, type Sleep } from "./paging";
 
 export interface JobContext {
-  db: XlyticsDb;
+  db: XploreDb;
   client: XClient;
   ingestor: Ingestor;
   userId: string;
@@ -21,8 +21,9 @@ export const BACKFILL_MAX_PAGES = 60;
 export const REFRESH_PAGES = 2;
 export const MENTIONS_PAGES = 2;
 export const DEFAULT_RETENTION_DAYS = 90;
+export const METRIC_RETENTION_MS = 90 * DAY_MS;
 
-async function markRun(db: XlyticsDb, key: string, patch: Record<string, unknown>): Promise<void> {
+async function markRun(db: XploreDb, key: string, patch: Record<string, unknown>): Promise<void> {
   const row = (await db.backfill.get(key)) ?? { key };
   await db.backfill.put({ ...row, ...patch });
 }
@@ -105,7 +106,7 @@ export async function runMentions(ctx: JobContext): Promise<PagingResult | undef
  * Deletes other people's tweets older than the retention window, keeping anything the user
  * replied to or quoted so conversation context survives.
  */
-export async function runPrune(db: XlyticsDb, userId: string, retentionDays: number = DEFAULT_RETENTION_DAYS, now: number = Date.now()): Promise<number> {
+export async function runPrune(db: XploreDb, userId: string, retentionDays: number = DEFAULT_RETENTION_DAYS, now: number = Date.now()): Promise<number> {
   const cutoff = now - retentionDays * DAY_MS;
   const referenced = new Set<string>();
   await db.tweets.where("user_id_str").equals(userId).each((t) => {
@@ -118,5 +119,7 @@ export async function runPrune(db: XlyticsDb, userId: string, retentionDays: num
     if (t.user_id_str !== userId && !referenced.has(t.id)) victims.push(t.id);
   });
   if (victims.length) await db.tweets.bulkDelete(victims);
+  await db.tweetMetrics.where("taken_at").below(now - METRIC_RETENTION_MS).delete();
+  await db.followerPoints.where("taken_at").below(now - BACKFILL_MAX_AGE_MS).delete();
   return victims.length;
 }
