@@ -1,0 +1,37 @@
+name: Release
+
+# Pushing a tag such as v1.2.0 builds the extension, checks it, and attaches xplore-v1.2.0.zip
+# to a GitHub release. The tag must match the version in manifest.json.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run verify
+
+      - name: Package
+        run: EXPECTED_VERSION="${GITHUB_REF_NAME#v}" node scripts/package.mjs
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.zip \
+            --title "Xplore $GITHUB_REF_NAME" \
+            --notes "Download the zip below, unzip it, then in Chrome open chrome://extensions, turn on Developer mode, click Load unpacked and pick the unzipped folder. Full steps in the README."
